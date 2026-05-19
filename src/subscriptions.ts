@@ -28,4 +28,4 @@ export const PRO_MONTHLY_CREDITS = 60
 export const PRO_MONTHLY_GRANT_INTERVAL_DAYS = 28
 
 /** Number of credits granted to a brand-new account on first login. */
-export const SIGNUP_BONUS_CREDITS = 5
+export const SIGNUP_BONUS_CREDITS = 10
