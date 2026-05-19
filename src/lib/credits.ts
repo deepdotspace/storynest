@@ -5,9 +5,18 @@
 
 import type { PageCount } from '../plans'
 
-/** Cost to generate a book of N pages. 1 credit per page. */
+/**
+ * Pricing unit: **1 credit = 1 generated asset** (one image OR one
+ * audio narration). A full page is image + audio = 2 credits. Re-rolls
+ * are also priced per-asset (1 credit each), so the cost matches what
+ * was actually regenerated.
+ */
+export const CREDITS_PER_PAGE = 2
+export const CREDITS_PER_REROLL = 1
+
+/** Cost to generate a book of N pages. Cover is bundled — no extra charge. */
 export function creditsForBook(pageCount: PageCount | number): number {
-  return Number(pageCount) || 0
+  return (Number(pageCount) || 0) * CREDITS_PER_PAGE
 }
 
 export interface CreditAccount {

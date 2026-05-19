@@ -210,7 +210,7 @@ export default function Create() {
             <span>
               {account.isOwner
                 ? 'Admin · unlimited credits'
-                : `1 credit per page · ${account.balance} credits available`}
+                : `2 credits per page · 1 per re-roll · ${account.balance} available`}
             </span>
             {!account.isOwner && (
               <Link

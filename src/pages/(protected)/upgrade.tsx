@@ -193,7 +193,7 @@ export default function Upgrade() {
             color: 'var(--storynest-ink-mute)',
           }}
         >
-          one credit per page · pay-as-you-go or subscribe
+          2 credits per page · 1 per re-roll · pay-as-you-go or subscribe
         </p>
 
         <div

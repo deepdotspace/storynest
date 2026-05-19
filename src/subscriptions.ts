@@ -22,10 +22,13 @@ export const subscriptionPlans = [
 export type SubscriptionSlug = (typeof subscriptionPlans)[number]['slug']
 
 /** How many credits the user's Pro plan grants per calendar month. */
-export const PRO_MONTHLY_CREDITS = 60
+export const PRO_MONTHLY_CREDITS = 120
 
 /** Days between automatic monthly grants (a touch under 30 to avoid skipping a month). */
 export const PRO_MONTHLY_GRANT_INTERVAL_DAYS = 28
 
-/** Number of credits granted to a brand-new account on first login. */
-export const SIGNUP_BONUS_CREDITS = 10
+/**
+ * Number of credits granted to a brand-new account on first login.
+ * 20 = one full 8-page book (16 credits) + headroom for 4 re-rolls.
+ */
+export const SIGNUP_BONUS_CREDITS = 20

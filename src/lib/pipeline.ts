@@ -127,8 +127,9 @@ export async function runStorybookPipeline(deps: PipelineDeps): Promise<Pipeline
   let creditsReserved = 0
 
   try {
-    /* 0. reserve credits up-front. 1 credit per page. */
-    const cost = params.pageCount | 0
+    /* 0. reserve credits up-front. 2 credits per page (image + audio).
+       Cover is bundled — no extra charge. */
+    const cost = (params.pageCount | 0) * 2
     const reserveRes = await callAction<{ balance: number; insufficient?: boolean }>(
       'reserveCredits',
       { amount: cost },
@@ -306,12 +307,17 @@ export async function rerollPageImage(args: {
   onUploadFailure?: (msg: string) => void
 }): Promise<{ ok: boolean; error?: string }> {
   const { callAction, pagesMutations, r2, page, artStyle, characterSheet, onUploadFailure } = args
+  const reserved = await reserveOne(callAction)
+  if (!reserved.ok) return { ok: false, error: reserved.error }
   const res = await callAction<ImageResp>('generatePageImage', {
     imagePrompt: page.imagePrompt,
     artStyle,
     characterSheet: characterSheet || '',
   })
-  if (!res.success) return { ok: false, error: res.error }
+  if (!res.success) {
+    await refundOne(callAction)
+    return { ok: false, error: res.error }
+  }
   const key = await tryUpload(
     r2,
     res.data.base64Png,
@@ -323,6 +329,23 @@ export async function rerollPageImage(args: {
   return { ok: true }
 }
 
+/**
+ * Reserve one credit before a re-roll, refund if the integration call
+ * fails (so users only pay for actual successful re-generations).
+ * Server-side, the owner bypass kicks in and the deduction is a no-op.
+ */
+async function reserveOne(
+  callAction: PipelineDeps['callAction'],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await callAction<{ balance: number }>('reserveCredits', { amount: 1 })
+  if (!res.success) return { ok: false, error: res.error || 'Could not reserve credit' }
+  return { ok: true }
+}
+
+async function refundOne(callAction: PipelineDeps['callAction']) {
+  await callAction('refundCredits', { amount: 1 })
+}
+
 export async function rerollCover(args: {
   callAction: PipelineDeps['callAction']
   booksMutations: Mutations<Storybook>
@@ -331,13 +354,18 @@ export async function rerollCover(args: {
   onUploadFailure?: (msg: string) => void
 }): Promise<{ ok: boolean; error?: string }> {
   const { callAction, booksMutations, r2, book, onUploadFailure } = args
+  const reserved = await reserveOne(callAction)
+  if (!reserved.ok) return { ok: false, error: reserved.error }
   const res = await callAction<ImageResp>('generatePageImage', {
     artStyle: book.artStyle,
     imagePrompt: '',
     characterSheet: book.characterSheet || '',
     asCover: { title: book.title, characters: book.characters },
   })
-  if (!res.success) return { ok: false, error: res.error }
+  if (!res.success) {
+    await refundOne(callAction)
+    return { ok: false, error: res.error }
+  }
   const key = await tryUpload(
     r2,
     res.data.base64Png,
@@ -357,8 +385,13 @@ export async function rerollPageAudio(args: {
   onUploadFailure?: (msg: string) => void
 }): Promise<{ ok: boolean; error?: string }> {
   const { callAction, pagesMutations, r2, page, onUploadFailure } = args
+  const reserved = await reserveOne(callAction)
+  if (!reserved.ok) return { ok: false, error: reserved.error }
   const res = await callAction<AudioResp>('generatePageAudio', { text: page.text })
-  if (!res.success) return { ok: false, error: res.error }
+  if (!res.success) {
+    await refundOne(callAction)
+    return { ok: false, error: res.error }
+  }
   const key = await tryUpload(
     r2,
     res.data.base64Mp3,
