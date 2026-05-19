@@ -21,7 +21,7 @@ import { useToast } from '../../components/ui'
 import { CreateWizard, type CreateWizardValues } from '../../components/storybook/CreateWizard'
 import { GenerationProgress } from '../../components/storybook/GenerationProgress'
 import { Cloud, Star } from '../../components/decor'
-import { Hootie } from '../../components/mascots/Hootie'
+import { InteractiveMascot } from '../../components/mascots/InteractiveMascot'
 import { runStorybookPipeline, type Storybook, type Page } from '../../lib/pipeline'
 import { callAction } from '../../lib/callAction'
 import { useCreditAccount } from '../../lib/useCreditAccount'
@@ -121,19 +121,25 @@ export default function Create() {
 
   return (
     <div className="mx-auto flex max-w-[1400px] items-start gap-8 px-2">
-      {/* Side mascot — Hootie reading along, sways slowly as if turning pages.
-          Hidden below 2xl so it never crowds the form on narrow viewports. */}
-      <aside
-        aria-hidden
-        className="hidden 2xl:block w-[150px] shrink-0 pt-32"
-      >
-        <Hootie variant="reading" size={150} className="mascot-sway" />
-        <div
-          className="font-hand mt-2 text-center text-[17px]"
-          style={{ color: 'var(--storynest-lavender-deep)' }}
-        >
-          tell us your idea
-        </div>
+      {/* Side mascot — Hootie reading along, sways slowly as if turning
+          pages. Tap him to hear a thought. */}
+      <aside className="hidden 2xl:block w-[170px] shrink-0 pt-32">
+        <InteractiveMascot
+          variant="reading"
+          size={150}
+          ambientAnim="mascot-sway"
+          byline="tell us your idea"
+          bylineColor="var(--storynest-lavender-deep)"
+          ariaLabel="Tap Hootie for inspiration"
+          phrases={[
+            'Oh, a new story.',
+            'What is the idea?',
+            'Who is it for?',
+            'Tell me everything.',
+            'Make it a cozy one.',
+            'I love a brave little hero.',
+          ]}
+        />
       </aside>
 
       <div className="relative mx-auto w-full max-w-2xl px-6 py-12 sm:py-16">
@@ -233,12 +239,20 @@ export default function Create() {
       </div>
       </div>
 
-      {/* Right margin — a small sleeping Hootie + moon for atmosphere. */}
-      <aside
-        aria-hidden
-        className="hidden 2xl:flex w-[150px] shrink-0 flex-col items-center pt-72"
-      >
-        <Hootie variant="sleeping" size={120} className="mascot-float" />
+      {/* Right margin — a small sleeping Hootie for atmosphere. */}
+      <aside className="hidden 2xl:flex w-[150px] shrink-0 flex-col items-center pt-72">
+        <InteractiveMascot
+          variant="sleeping"
+          size={120}
+          ambientAnim="mascot-float"
+          ariaLabel="Tap to wake Hootie"
+          phrases={[
+            'Wake me when it is ready.',
+            'Zzz…',
+            'I am dreaming of clouds.',
+            'Soft pages, soft pillow.',
+          ]}
+        />
       </aside>
     </div>
   )

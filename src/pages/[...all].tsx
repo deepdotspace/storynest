@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Hootie } from '../components/mascots/Hootie'
+import { InteractiveMascot } from '../components/mascots/InteractiveMascot'
 import { Cloud, Star } from '../components/decor'
 
 export default function NotFound() {
@@ -16,9 +16,18 @@ export default function NotFound() {
         style={{ position: 'absolute', top: 80, right: '20%', opacity: 0.8 }}
       />
 
-      <div className="mascot-float">
-        <Hootie variant="sleeping" size={160} />
-      </div>
+      <InteractiveMascot
+        variant="sleeping"
+        size={160}
+        ambientAnim="mascot-float"
+        ariaLabel="Tap to wake Hootie"
+        phrases={[
+          'Shhh, I am dreaming.',
+          'Wrong page, friend.',
+          'Try the library?',
+          'Nothing here but zzz’s.',
+        ]}
+      />
 
       <h1
         className="font-display mt-6 font-semibold leading-tight"
