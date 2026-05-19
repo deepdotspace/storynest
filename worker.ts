@@ -404,7 +404,7 @@ app.post('/api/actions/:name', async (c) => {
   const params = await c.req.json<Record<string, unknown>>()
   const callerJwt = c.req.header('Authorization')!.slice(7)
   const tools = createActionTools(c.env, auth.userId, callerJwt)
-  const result = await action({ userId: auth.userId, params, tools, env: c.env })
+  const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
   return c.json(result as unknown as Record<string, unknown>)
 })
 
@@ -500,10 +500,10 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
     return res.json() as Promise<ActionResult<TData>>
   }
 
-  async function callIntegration<T>(
+  async function callIntegration<T = unknown>(
     endpoint: string,
     data?: unknown,
-  ): Promise<ActionResult<{ response: T; status?: number }>> {
+  ): Promise<ActionResult<T>> {
     const integrationName = endpoint.split('/')[0]
     const billingMode = integrations[integrationName]?.billing ?? 'developer'
 
@@ -519,7 +519,7 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
       },
       body: JSON.stringify(data ?? {}),
     })
-    return res.json() as Promise<ActionResult<{ response: T; status?: number }>>
+    return res.json() as Promise<ActionResult<T>>
   }
 
   return {
@@ -530,6 +530,8 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
     get: (collection, recordId) => execTool('records.get', { collection, recordId }),
     query: (collection, options) => execTool('records.query', { collection, ...options }),
     integration: callIntegration,
+    registerUser: (opts) =>
+      execTool('users.register', { userId: opts.userId ?? userId, ...opts }),
   }
 }
 

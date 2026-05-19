@@ -1,7 +1,10 @@
 /**
- * The narration "callout" that floats over the lower edge of a page's
- * illustration. Mounted always; only its opacity changes when toggled so
- * the surrounding layout doesn't jump.
+ * The narration "callout" floating over the lower edge of a page's
+ * illustration. Mounted always; only opacity toggles so layout never
+ * jumps when the user hides the text.
+ *
+ * v2 chrome: white sticker card, hard-offset shadow, Nunito 24/500
+ * (NOT italic, NOT EB-Garamond — those were the v1 cream-paper look).
  */
 
 import { cn } from '../ui/utils'
@@ -17,26 +20,30 @@ export function TextBubble({ text, visible, className }: TextBubbleProps) {
     <div
       aria-hidden={!visible}
       className={cn(
-        'pointer-events-none mx-auto w-full max-w-[720px] transition-opacity duration-200',
+        'pointer-events-none mx-auto w-full transition-opacity duration-200',
         visible ? 'opacity-100' : 'opacity-0',
         className,
       )}
+      style={{ maxWidth: 680 }}
     >
       <div
-        className="rounded-2xl px-8 py-7 sm:px-10 sm:py-8 shadow-[0_2px_12px_rgba(33,42,80,0.06)]"
+        className="px-7 py-7 sm:px-10 sm:py-8"
         style={{
-          background: 'oklch(0.975 0.013 84 / 0.92)',
-          borderColor: 'var(--storynest-rule)',
-          borderWidth: 1,
-          borderStyle: 'solid',
+          background: 'oklch(1 0 0 / 0.96)',
+          border: '2px solid var(--storynest-sky-soft)',
+          borderRadius: 24,
+          boxShadow: 'var(--shadow-sticker)',
           color: 'var(--storynest-ink)',
         }}
       >
         <p
-          className="font-serif italic text-center"
+          className="text-center"
           style={{
-            fontSize: '23px',
+            fontFamily: 'var(--storynest-font-body, Nunito), system-ui, sans-serif',
+            fontSize: 24,
+            fontWeight: 500,
             lineHeight: 1.55,
+            fontStyle: 'normal',
           }}
         >
           {text}

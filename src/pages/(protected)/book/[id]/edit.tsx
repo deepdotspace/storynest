@@ -2,8 +2,8 @@
  * /book/:id/edit — the per-page editor.
  *
  * If book.status !== 'ready', renders <GenerationProgress>.
- * Otherwise: title (inline editable), Read button, Delete confirmation,
- * and a column of <PageEditor>s.
+ * Otherwise: cover sticker (left) + title (inline editable) and actions
+ * (right), then a column of <PageEditor>s.
  */
 
 import { useMemo, useState } from 'react'
@@ -19,6 +19,7 @@ import {
   DialogDescription,
   DialogFooter,
   useToast,
+  cn,
 } from '../../../../components/ui'
 import { GenerationProgress } from '../../../../components/storybook/GenerationProgress'
 import { PageEditor } from '../../../../components/storybook/PageEditor'
@@ -80,15 +81,19 @@ export default function EditBook() {
     return (
       <div className="mx-auto max-w-md px-6 py-16 text-center">
         <h2
-          className="font-serif text-[28px]"
-          style={{ color: 'var(--storynest-ink, var(--color-foreground))' }}
+          className="font-display"
+          style={{
+            color: 'var(--storynest-ink)',
+            fontSize: 28,
+            fontWeight: 600,
+          }}
         >
           Story not found
         </h2>
         <Link
           to="/library"
           className="mt-4 inline-block text-sm underline"
-          style={{ color: 'var(--storynest-marigold-d, var(--storynest-marigold))' }}
+          style={{ color: 'var(--storynest-sky-deep)' }}
         >
           Back to library
         </Link>
@@ -145,9 +150,8 @@ export default function EditBook() {
     }
   }
 
-  async function onToggleVisibility() {
-    if (!book) return
-    const next = book.visibility === 'private' ? 'public' : 'private'
+  async function setVisibility(next: 'public' | 'private') {
+    if (!book || book.visibility === next) return
     setVisibilityBusy(true)
     try {
       const res = await callAction<{ visibility: string }>('setBookVisibility', {
@@ -181,50 +185,69 @@ export default function EditBook() {
     }
   }
 
+  const visibilityIsPublic = book.visibility !== 'private'
+
   return (
     <div
       data-testid="edit-page"
       className="mx-auto max-w-4xl px-6 py-12"
     >
-      <header className="mb-10 grid gap-6 md:grid-cols-[180px_1fr]">
-        <div
-          className="relative aspect-[3/4] w-full overflow-hidden rounded-md"
-          style={{
-            background: 'var(--storynest-paper-deep)',
-            border: '1px solid var(--storynest-rule)',
-          }}
-        >
-          <PageImage
-            imageKey={book.coverImageKey}
-            alt={`Cover for ${book.title}`}
-            contain
-          />
-          <button
-            type="button"
-            onClick={onRerollCover}
-            disabled={coverBusy}
-            data-testid="reroll-cover"
-            className="absolute bottom-2 left-2 right-2 inline-flex items-center justify-center rounded-md px-2 py-1.5 text-[12px] font-medium transition-opacity disabled:opacity-60"
+      <header className="mb-10 grid gap-6 md:grid-cols-[220px_1fr]">
+        <div className="relative">
+          <div
+            className="relative aspect-[3/4] w-full overflow-hidden"
             style={{
-              background: 'oklch(0.22 0.035 265 / 0.78)',
-              color: 'var(--storynest-paper)',
-              backdropFilter: 'blur(2px)',
+              background: 'var(--storynest-card)',
+              border: '1.5px solid var(--storynest-rule)',
+              borderRadius: 20,
+              boxShadow: 'var(--shadow-sticker)',
             }}
           >
-            {coverBusy ? 'Re-rolling…' : 'Re-roll cover'}
-          </button>
+            <PageImage
+              imageKey={book.coverImageKey}
+              alt={`Cover for ${book.title}`}
+              contain
+            />
+            <button
+              type="button"
+              onClick={onRerollCover}
+              disabled={coverBusy}
+              data-testid="reroll-cover"
+              className="absolute bottom-2 left-2 right-2 inline-flex items-center justify-center rounded-full transition-opacity disabled:opacity-60"
+              style={{
+                padding: '8px 12px',
+                background: 'oklch(0.22 0.04 265 / 0.82)',
+                color: 'oklch(0.99 0.005 240)',
+                fontFamily: 'Nunito, system-ui, sans-serif',
+                fontSize: 12,
+                fontWeight: 600,
+                border: '1.5px solid oklch(0.99 0.005 240 / 0.2)',
+              }}
+            >
+              {coverBusy ? 'Re-rolling…' : 'Re-roll cover'}
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 flex-1">
+        <div className="flex flex-col gap-4">
+          <div className="min-w-0">
             {editingTitle ? (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Input
                   value={titleDraft}
                   onChange={(e) => setTitleDraft(e.target.value)}
                   autoFocus
                   data-testid="edit-title-input"
-                  className="font-serif text-[28px]"
+                  className="font-display"
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 600,
+                    height: 'auto',
+                    padding: '12px 16px',
+                    borderRadius: 16,
+                    border: '1.5px solid var(--storynest-sky-soft)',
+                    color: 'var(--storynest-ink)',
+                  }}
                 />
                 <Button size="sm" onClick={saveTitle}>Save</Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditingTitle(false)}>Cancel</Button>
@@ -237,66 +260,125 @@ export default function EditBook() {
                 className="text-left"
               >
                 <h1
-                  className="font-serif text-[33px] leading-tight"
-                  style={{ color: 'var(--storynest-ink, var(--color-foreground))' }}
+                  className="font-display leading-tight md:text-[40px]"
+                  style={{
+                    color: 'var(--storynest-ink)',
+                    fontSize: 32,
+                    fontWeight: 600,
+                  }}
                 >
                   {book.title}
                 </h1>
               </button>
             )}
             <p
-              className="font-hand mt-2 text-[18px]"
-              style={{ color: 'var(--storynest-ink-mute)' }}
+              className="font-hand mt-2"
+              style={{
+                color: 'var(--storynest-ink-mute)',
+                fontSize: 20,
+              }}
             >
               {sortedPages.length} pages · {book.artStyle}
             </p>
           </div>
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Link
               to={`/book/${bookId}/read`}
               data-testid="open-reader"
-              className="inline-flex items-center rounded-md px-4 py-2 text-sm font-medium"
+              className="inline-flex items-center rounded-full transition-transform active:translate-x-[4px] active:translate-y-[4px]"
               style={{
-                background: 'var(--storynest-marigold)',
-                color: 'oklch(0.18 0.04 60)',
+                padding: '12px 24px',
+                background: 'var(--storynest-sky)',
+                color: 'oklch(0.99 0.005 240)',
+                fontFamily: 'Fredoka, system-ui, sans-serif',
+                fontSize: 16,
+                fontWeight: 600,
+                boxShadow: '4px 4px 0 0 var(--storynest-sky-deep)',
               }}
             >
               Read story
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onToggleVisibility}
-              loading={visibilityBusy}
-              disabled={visibilityBusy}
+
+            <div
+              role="radiogroup"
+              aria-label="Visibility"
               data-testid="toggle-visibility"
-              className="inline-flex items-center gap-1.5"
+              className="inline-flex items-center gap-1 rounded-full"
+              style={{
+                padding: 4,
+                background: 'var(--storynest-card)',
+                border: '1.5px solid var(--storynest-rule)',
+              }}
             >
-              {book.visibility === 'private' ? (
-                <>
-                  <Lock className="h-3.5 w-3.5" aria-hidden /> Private
-                </>
-              ) : (
-                <>
-                  <Globe className="h-3.5 w-3.5" aria-hidden /> Public
-                </>
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
+              <button
+                type="button"
+                role="radio"
+                aria-checked={visibilityIsPublic}
+                onClick={() => setVisibility('public')}
+                disabled={visibilityBusy}
+                data-testid="toggle-visibility-public"
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-full transition-colors',
+                )}
+                style={{
+                  padding: '6px 14px',
+                  background: visibilityIsPublic ? 'var(--storynest-sky)' : 'transparent',
+                  color: visibilityIsPublic ? 'oklch(0.99 0.005 240)' : 'var(--storynest-ink-soft)',
+                  fontFamily: 'Nunito, system-ui, sans-serif',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  border: 'none',
+                  opacity: visibilityBusy ? 0.6 : 1,
+                }}
+              >
+                <Globe className="h-3.5 w-3.5" aria-hidden /> Public
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={!visibilityIsPublic}
+                onClick={() => setVisibility('private')}
+                disabled={visibilityBusy}
+                data-testid="toggle-visibility-private"
+                className="inline-flex items-center gap-1.5 rounded-full transition-colors"
+                style={{
+                  padding: '6px 14px',
+                  background: !visibilityIsPublic ? 'var(--storynest-sky)' : 'transparent',
+                  color: !visibilityIsPublic ? 'oklch(0.99 0.005 240)' : 'var(--storynest-ink-soft)',
+                  fontFamily: 'Nunito, system-ui, sans-serif',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  border: 'none',
+                  opacity: visibilityBusy ? 0.6 : 1,
+                }}
+              >
+                <Lock className="h-3.5 w-3.5" aria-hidden /> Private
+              </button>
+            </div>
+
+            <button
+              type="button"
               onClick={() => setConfirmDelete(true)}
               data-testid="delete-book"
-              style={{ color: 'var(--storynest-ink-mute)' }}
+              className="rounded-full transition-colors hover:bg-[var(--storynest-coral-soft)]"
+              style={{
+                padding: '6px 14px',
+                color: 'var(--storynest-coral-deep)',
+                fontFamily: 'Nunito, system-ui, sans-serif',
+                fontSize: 13,
+                fontWeight: 600,
+                background: 'transparent',
+                border: 'none',
+              }}
             >
               Delete
-            </Button>
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="space-y-5">
+      <div className="space-y-4">
         {sortedPages.map((p) => (
           <PageEditor
             key={p.recordId}

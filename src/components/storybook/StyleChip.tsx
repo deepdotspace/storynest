@@ -1,6 +1,7 @@
 /**
  * StyleChip — a selectable card in the wizard's art-style picker.
- * Visual mock of each style via small CSS — no AI imagery here.
+ * Bigger sticker card with an illustrated swatch (top) and label (bottom).
+ * Selected state lifts with a lavender ring and a coral check.
  */
 
 import { ART_STYLE_LABELS, type ArtStyle } from '../../plans'
@@ -12,40 +13,49 @@ interface StyleChipProps {
   onSelect: () => void
 }
 
+const INK = 'var(--storynest-ink)'
+
 function Swatch({ style }: { style: ArtStyle }) {
   switch (style) {
     case 'watercolor':
       return (
         <div
-          className="h-16 w-full rounded-md"
+          className="h-full w-full"
           style={{
             background:
-              'radial-gradient(at 30% 40%, oklch(0.88 0.10 65 / 0.85), transparent 55%),' +
-              'radial-gradient(at 70% 60%, oklch(0.82 0.09 200 / 0.65), transparent 55%),' +
-              'oklch(0.96 0.02 84)',
+              'radial-gradient(at 30% 38%, var(--storynest-sky-soft) 0%, transparent 58%),' +
+              'radial-gradient(at 72% 64%, var(--storynest-coral-soft) 0%, transparent 58%),' +
+              'var(--storynest-card-soft)',
           }}
-        />
+        >
+          <svg viewBox="0 0 60 60" className="h-full w-full" aria-hidden="true">
+            <circle cx="22" cy="24" r="13" fill="var(--storynest-sky)" opacity="0.55" />
+            <circle cx="36" cy="36" r="14" fill="var(--storynest-coral)" opacity="0.50" />
+          </svg>
+        </div>
       )
     case 'paper-cutout':
       return (
         <div
-          className="relative h-16 w-full rounded-md overflow-hidden"
-          style={{ background: 'oklch(0.96 0.02 84)' }}
+          className="relative h-full w-full overflow-hidden"
+          style={{ background: 'var(--storynest-card-soft)' }}
         >
           <div
             className="absolute"
             style={{
-              left: '14%', top: '38%', width: '34%', height: '38%',
-              background: 'oklch(0.78 0.155 72)', borderRadius: 3,
-              boxShadow: '2px 2px 0 oklch(0.22 0.035 265 / 0.08)',
+              left: '16%', top: '34%', width: '36%', height: '46%',
+              background: 'var(--storynest-mint)', borderRadius: 4,
+              boxShadow: '3px 3px 0 0 var(--storynest-ink) / 0.16',
+              border: '1.5px solid var(--storynest-ink)',
             }}
           />
           <div
             className="absolute"
             style={{
-              left: '44%', top: '20%', width: '40%', height: '52%',
-              background: 'oklch(0.72 0.075 150)', borderRadius: 3,
-              boxShadow: '2px 2px 0 oklch(0.22 0.035 265 / 0.08)',
+              left: '46%', top: '20%', width: '38%', height: '52%',
+              background: 'var(--storynest-sun)', borderRadius: 4,
+              boxShadow: '3px 3px 0 0 oklch(0.22 0.04 265 / 0.16)',
+              border: '1.5px solid var(--storynest-ink)',
             }}
           />
         </div>
@@ -53,32 +63,83 @@ function Swatch({ style }: { style: ArtStyle }) {
     case 'soft-pastel':
       return (
         <div
-          className="h-16 w-full rounded-md"
-          style={{
-            background:
-              'linear-gradient(135deg, oklch(0.92 0.06 350), oklch(0.92 0.06 220))',
-          }}
-        />
+          className="relative h-full w-full overflow-hidden"
+          style={{ background: 'var(--storynest-lavender-soft)' }}
+        >
+          <div
+            className="absolute"
+            style={{
+              left: '14%', top: '30%', width: '40%', height: '50%',
+              background: 'var(--storynest-bubblegum)',
+              opacity: 0.55,
+              borderRadius: '50%',
+              filter: 'blur(2px)',
+            }}
+          />
+          <div
+            className="absolute"
+            style={{
+              left: '46%', top: '22%', width: '42%', height: '54%',
+              background: 'var(--storynest-lavender)',
+              opacity: 0.65,
+              borderRadius: '50%',
+              filter: 'blur(2px)',
+            }}
+          />
+        </div>
       )
     case 'classic-ink':
       return (
         <div
-          className="relative h-16 w-full rounded-md overflow-hidden"
-          style={{ background: 'oklch(0.97 0.01 84)' }}
+          className="relative h-full w-full overflow-hidden"
+          style={{ background: 'var(--storynest-sun-soft)' }}
         >
-          <svg viewBox="0 0 100 60" className="absolute inset-0 h-full w-full">
+          <svg viewBox="0 0 100 60" className="absolute inset-0 h-full w-full" aria-hidden="true">
             <path
-              d="M5 50 Q 25 10, 50 35 T 95 25"
+              d="M12 16 C 28 8, 42 8, 48 22 C 54 36, 70 40, 86 32"
               fill="none"
-              stroke="oklch(0.22 0.035 265)"
+              stroke={INK}
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M18 44 Q 32 30, 50 42 T 84 46"
+              fill="none"
+              stroke={INK}
               strokeWidth="1.5"
               strokeLinecap="round"
             />
-            <circle cx="30" cy="38" r="3" fill="oklch(0.72 0.135 22 / 0.6)" />
+            <circle cx="48" cy="22" r="4.5" fill="var(--storynest-coral)" opacity="0.7" />
           </svg>
         </div>
       )
   }
+}
+
+function CheckBadge() {
+  return (
+    <span
+      aria-hidden
+      className="absolute -right-2 -top-2 inline-flex h-7 w-7 items-center justify-center rounded-full"
+      style={{
+        background: 'var(--storynest-coral)',
+        border: `2px solid ${INK}`,
+        boxShadow: '2px 2px 0 0 oklch(0.22 0.04 265 / 0.14)',
+        color: 'oklch(0.99 0.005 240)',
+      }}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path
+          d="M3 8.5 L 7 12 L 13 4.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </span>
+  )
 }
 
 export function StyleChip({ style, selected, onSelect }: StyleChipProps) {
@@ -89,30 +150,39 @@ export function StyleChip({ style, selected, onSelect }: StyleChipProps) {
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        'text-left rounded-lg p-3 transition-colors',
-        'bg-card hover:bg-accent/40',
+        'group relative flex flex-col overflow-hidden text-left transition-transform',
+        selected ? '-translate-y-0.5' : 'hover:-translate-y-0.5',
       )}
       style={{
+        minHeight: 130,
+        background: 'var(--storynest-card)',
+        borderRadius: 20,
         border: selected
-          ? `2px solid var(--storynest-marigold)`
-          : `1px solid var(--storynest-rule)`,
-        boxShadow: selected ? '0 0 0 3px oklch(0.78 0.155 72 / 0.18)' : undefined,
+          ? '2.5px solid var(--storynest-lavender-deep)'
+          : '1.5px solid var(--storynest-rule)',
+        boxShadow: selected ? 'var(--shadow-sticker-hover)' : 'var(--shadow-sticker)',
       }}
     >
-      <Swatch style={style} />
-      <div className="mt-2 flex items-center justify-between">
-        <span className="text-sm" style={{ color: 'var(--storynest-ink, var(--color-foreground))' }}>
+      <div className="relative h-[78px] w-full">
+        <Swatch style={style} />
+        {selected && <CheckBadge />}
+      </div>
+      <div
+        className="flex items-center px-4 py-3"
+        style={{
+          borderTop: '1.5px solid var(--storynest-rule)',
+          background: 'var(--storynest-card)',
+        }}
+      >
+        <span
+          className="font-display text-[16px]"
+          style={{
+            color: 'var(--storynest-ink)',
+            fontWeight: 600,
+          }}
+        >
           {ART_STYLE_LABELS[style]}
         </span>
-        {selected && (
-          <span
-            className="text-[11px] font-medium"
-            style={{ color: 'var(--storynest-sage)' }}
-            aria-hidden
-          >
-            ✓
-          </span>
-        )}
       </div>
     </button>
   )

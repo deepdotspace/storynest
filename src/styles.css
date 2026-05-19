@@ -163,43 +163,41 @@
   }
 
   body {
-    font-family: 'Work Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, sans-serif;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 14px;
+    font-size: 15px;
     color: var(--color-foreground);
     letter-spacing: -0.005em;
   }
 
-  /* storynest typography — EB Garamond for content, Work Sans for chrome, Caveat for accents */
+  /* storynest v2 typography — Fredoka for display, Nunito for body, Caveat for accent. */
   [data-theme="storynest"] body {
-    font-family: 'Work Sans', sans-serif;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 500;
   }
+  [data-theme="storynest"] .font-display {
+    font-family: 'Fredoka', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+  }
+  /* Legacy alias — old code used .font-serif. Map to display so nothing
+     visually regresses while sub-agents migrate to .font-display. */
   [data-theme="storynest"] .font-serif {
-    font-family: 'EB Garamond', Georgia, serif;
-    letter-spacing: 0;
+    font-family: 'Fredoka', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+    font-weight: 600;
   }
   [data-theme="storynest"] .font-hand {
     font-family: 'Caveat', cursive;
     letter-spacing: 0;
+    font-weight: 500;
   }
   [data-theme="storynest"] .font-chrome {
-    font-family: 'Work Sans', sans-serif;
+    font-family: 'Nunito', sans-serif;
+    font-weight: 600;
   }
-  /* Subtle paper grain on the body — soft, never noisy */
-  [data-theme="storynest"] body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    opacity: 0.4;
-    background-image:
-      radial-gradient(oklch(0.22 0.035 265 / 0.018) 1px, transparent 1px);
-    background-size: 3px 3px;
-  }
-  [data-theme="storynest"] #root { position: relative; z-index: 1; }
 
   /* Scrollbar styling */
   ::-webkit-scrollbar {

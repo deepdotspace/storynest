@@ -1,10 +1,11 @@
 /**
  * PageEditor — single page row in the edit screen.
- * Image thumb + inline-editable text + three re-roll buttons.
+ * Sticker card with a mini-thumbnail (coral page badge floats over its
+ * top-left), Nunito body text, and three accent-tinted re-roll buttons.
  */
 
 import { useState } from 'react'
-import { Button, Textarea, useToast, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../ui'
+import { Textarea, useToast, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, cn } from '../ui'
 import { useR2Files } from 'deepspace'
 import { useAssetBlobUrl } from '../../lib/assetUrl'
 import { callAction } from '../../lib/callAction'
@@ -20,6 +21,170 @@ interface Props {
   pagesPut: (recordId: string, data: Partial<Page>) => Promise<void>
 }
 
+interface StatusPill {
+  background: string
+  color: string
+  border: string
+  label: string
+}
+
+function statusPill(s: Page['status']): StatusPill {
+  switch (s) {
+    case 'ready':
+      return {
+        background: 'var(--storynest-mint)',
+        color: 'var(--storynest-ink)',
+        border: '1.5px solid var(--storynest-mint-deep)',
+        label: 'Ready',
+      }
+    case 'image-ready':
+      return {
+        background: 'var(--storynest-sun)',
+        color: 'var(--storynest-ink)',
+        border: '1.5px solid var(--storynest-sun-deep)',
+        label: 'Image ready',
+      }
+    case 'text-ready':
+      return {
+        background: 'transparent',
+        color: 'var(--storynest-ink-soft)',
+        border: '1.5px solid var(--storynest-rule)',
+        label: 'Text ready',
+      }
+    case 'failed':
+      return {
+        background: 'transparent',
+        color: 'var(--storynest-coral-deep)',
+        border: '1.5px solid var(--storynest-coral)',
+        label: 'Failed',
+      }
+    case 'pending':
+    default:
+      return {
+        background: 'transparent',
+        color: 'var(--storynest-ink-mute)',
+        border: '1.5px solid var(--storynest-rule)',
+        label: 'Waiting',
+      }
+  }
+}
+
+interface PillBtnProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  tone: 'sky' | 'sun' | 'mute' | 'ghost'
+  loading?: boolean
+}
+
+function PillButton({ tone, loading, disabled, children, className, ...rest }: PillBtnProps) {
+  const tones = {
+    sky: {
+      background: 'var(--storynest-card)',
+      color: 'var(--storynest-sky-deep)',
+      border: '1.5px solid var(--storynest-sky-soft)',
+      hint: 'var(--storynest-sky-soft)',
+    },
+    sun: {
+      background: 'var(--storynest-card)',
+      color: 'var(--storynest-ink-soft)',
+      border: '1.5px solid var(--storynest-sun-soft)',
+      hint: 'var(--storynest-sun-soft)',
+    },
+    mute: {
+      background: 'var(--storynest-card)',
+      color: 'var(--storynest-ink-mute)',
+      border: '1.5px solid var(--storynest-rule)',
+      hint: 'transparent',
+    },
+    ghost: {
+      background: 'transparent',
+      color: 'var(--storynest-ink-soft)',
+      border: '1.5px solid var(--storynest-rule)',
+      hint: 'transparent',
+    },
+  }[tone]
+  return (
+    <button
+      {...rest}
+      disabled={disabled || loading}
+      className={cn(
+        'inline-flex items-center gap-2 rounded-full transition-all',
+        className,
+      )}
+      style={{
+        padding: '8px 16px',
+        background: tones.background,
+        color: tones.color,
+        border: tones.border,
+        fontFamily: 'Nunito, system-ui, sans-serif',
+        fontSize: 13,
+        fontWeight: 600,
+        opacity: disabled || loading ? 0.5 : 1,
+        cursor: disabled || loading ? 'not-allowed' : 'pointer',
+      }}
+    >
+      <span
+        aria-hidden
+        className="inline-block"
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 9999,
+          background: tones.hint,
+          border: tones.hint === 'transparent' ? 'none' : '1px solid var(--storynest-rule)',
+        }}
+      />
+      {loading && (
+        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      )}
+      {children}
+    </button>
+  )
+}
+
+function PrimaryPill({
+  onClick,
+  loading,
+  disabled,
+  children,
+  testId,
+}: {
+  onClick: () => void
+  loading?: boolean
+  disabled?: boolean
+  children: React.ReactNode
+  testId?: string
+}) {
+  const canClick = !disabled && !loading
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || loading}
+      data-testid={testId}
+      className={cn(
+        'inline-flex items-center gap-2 rounded-full transition-all',
+        canClick ? 'active:translate-x-[3px] active:translate-y-[3px]' : '',
+      )}
+      style={{
+        padding: '10px 20px',
+        background: 'var(--storynest-sky)',
+        color: 'oklch(0.99 0.005 240)',
+        fontFamily: 'Fredoka, system-ui, sans-serif',
+        fontSize: 14,
+        fontWeight: 600,
+        border: 'none',
+        boxShadow: canClick ? '3px 3px 0 0 var(--storynest-sky-deep)' : 'none',
+        opacity: canClick ? 1 : 0.5,
+        cursor: canClick ? 'pointer' : 'not-allowed',
+      }}
+    >
+      {loading && (
+        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+      )}
+      {children}
+    </button>
+  )
+}
+
 export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, pagesPut }: Props) {
   const toast = useToast()
   const r2 = useR2Files()
@@ -31,6 +196,8 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
   const [audBusy, setAudBusy] = useState(false)
   const [textBusy, setTextBusy] = useState(false)
 
+  const pill = statusPill(page.status)
+
   async function saveText() {
     if (draft.trim() === page.text.trim()) {
       setEditing(false)
@@ -39,7 +206,6 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
     setTextBusy(true)
     try {
       await pagesPut(recordId, { text: draft.trim() })
-      // Re-narrate after text edit.
       const res = await rerollPageAudio({
         callAction,
         pagesMutations: { create: async () => '', put: pagesPut, remove: async () => {} },
@@ -99,46 +265,93 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
   return (
     <div
       data-testid={`page-editor-${page.pageNumber}`}
-      className="grid grid-cols-1 gap-4 rounded-lg p-4 md:grid-cols-[200px_1fr]"
+      className="grid grid-cols-1 gap-5 md:grid-cols-[220px_1fr]"
       style={{
-        background: 'var(--storynest-paper-deep)',
-        border: '1px solid var(--storynest-rule)',
+        background: 'var(--storynest-card)',
+        border: '1.5px solid var(--storynest-rule)',
+        borderRadius: 22,
+        padding: 20,
+        boxShadow: 'var(--shadow-sticker)',
       }}
     >
-      <div
-        className="relative aspect-[3/4] w-full overflow-hidden rounded-md"
-        style={{ background: 'var(--storynest-paper)' }}
-      >
-        {imgUrl ? (
-          <img
-            src={imgUrl}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div
-            className="flex h-full w-full items-center justify-center font-serif text-[40px]"
-            style={{ color: 'var(--storynest-ink-mute)' }}
-          >
-            {page.pageNumber}
-          </div>
-        )}
+      <div className="relative">
+        <div
+          className="relative aspect-[3/4] w-full overflow-hidden"
+          style={{
+            background: 'var(--storynest-card-soft)',
+            border: '1.5px solid var(--storynest-rule)',
+            borderRadius: 16,
+          }}
+        >
+          {imgUrl ? (
+            <img
+              src={imgUrl}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div
+              className="flex h-full w-full items-center justify-center font-display"
+              style={{
+                color: 'var(--storynest-ink-mute)',
+                fontSize: 44,
+                fontWeight: 600,
+              }}
+            >
+              {page.pageNumber}
+            </div>
+          )}
+        </div>
+        <span
+          aria-hidden
+          className="absolute flex items-center justify-center"
+          style={{
+            top: -10,
+            left: -10,
+            width: 40,
+            height: 40,
+            borderRadius: 9999,
+            background: 'var(--storynest-coral)',
+            border: '2px solid var(--storynest-ink)',
+            color: 'oklch(0.99 0.005 240)',
+            fontFamily: 'Fredoka, system-ui, sans-serif',
+            fontSize: 18,
+            fontWeight: 700,
+            boxShadow: '2px 2px 0 0 oklch(0.22 0.04 265 / 0.14)',
+          }}
+        >
+          {page.pageNumber}
+        </span>
       </div>
 
       <div className="flex flex-col gap-3">
-        <div className="flex items-baseline justify-between">
+        <div className="flex items-center justify-between gap-3">
           <span
-            className="font-hand text-[18px]"
-            style={{ color: 'var(--storynest-ink-mute)' }}
+            className="font-display"
+            style={{
+              color: 'var(--storynest-ink-soft)',
+              fontSize: 17,
+              fontWeight: 600,
+            }}
           >
             Page {page.pageNumber}
           </span>
           <span
-            className="text-[11px] font-medium uppercase tracking-[0.05em]"
-            style={{ color: 'var(--storynest-ink-mute)' }}
+            className="rounded-full"
+            style={{
+              padding: '4px 12px',
+              fontFamily: 'Nunito, system-ui, sans-serif',
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              background: pill.background,
+              color: pill.color,
+              border: pill.border,
+            }}
           >
-            {page.status}
+            {pill.label}
           </span>
         </div>
 
@@ -149,20 +362,37 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
             rows={5}
             autoFocus
             data-testid={`page-text-edit-${page.pageNumber}`}
-            className="font-serif text-[16px]"
+            style={{
+              background: 'var(--storynest-card)',
+              border: '1.5px solid var(--storynest-sky-soft)',
+              borderRadius: 16,
+              padding: '14px 16px',
+              fontFamily: 'Nunito, system-ui, sans-serif',
+              fontSize: 16,
+              fontWeight: 500,
+              lineHeight: 1.6,
+              color: 'var(--storynest-ink)',
+              boxShadow: 'none',
+            }}
           />
         ) : (
           <button
             type="button"
             onClick={() => { setDraft(page.text); setEditing(true) }}
             data-testid={`page-text-${page.pageNumber}`}
-            className="w-full rounded-md p-2 text-left transition-colors hover:bg-card/40"
+            className="w-full rounded-2xl p-3 text-left transition-colors hover:bg-[var(--storynest-card-soft)]"
           >
             <p
-              className="font-serif text-[16px] leading-relaxed"
-              style={{ color: 'var(--storynest-ink, var(--color-foreground))' }}
+              style={{
+                fontFamily: 'Nunito, system-ui, sans-serif',
+                fontSize: 16,
+                lineHeight: 1.6,
+                color: 'var(--storynest-ink)',
+              }}
             >
-              {page.text || <em style={{ color: 'var(--storynest-ink-mute)' }}>No text yet</em>}
+              {page.text || (
+                <em style={{ color: 'var(--storynest-ink-mute)' }}>No text yet</em>
+              )}
             </p>
           </button>
         )}
@@ -170,52 +400,50 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {editing ? (
             <>
-              <Button
-                size="sm"
+              <PrimaryPill
                 onClick={saveText}
                 loading={textBusy}
                 disabled={textBusy}
-                data-testid={`save-text-${page.pageNumber}`}
+                testId={`save-text-${page.pageNumber}`}
               >
                 Save and re-narrate
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
+              </PrimaryPill>
+              <PillButton
+                tone="ghost"
                 onClick={() => { setEditing(false); setDraft(page.text) }}
                 disabled={textBusy}
               >
                 Cancel
-              </Button>
+              </PillButton>
             </>
           ) : (
             <>
-              <Button
-                size="sm"
-                variant="outline"
+              <PillButton
+                tone="sky"
                 onClick={onRerollImage}
                 loading={imgBusy}
                 disabled={imgBusy}
                 data-testid={`reroll-image-${page.pageNumber}`}
               >
                 Re-roll image
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
+              </PillButton>
+              <PillButton
+                tone="sun"
                 onClick={onRerollAudio}
                 loading={audBusy}
                 disabled={audBusy || !page.text.trim()}
                 data-testid={`reroll-audio-${page.pageNumber}`}
               >
                 Re-roll audio
-              </Button>
+              </PillButton>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button size="sm" variant="ghost" disabled>
-                      Re-roll text
-                    </Button>
+                    <span>
+                      <PillButton tone="mute" disabled>
+                        Re-roll text
+                      </PillButton>
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent>Coming soon</TooltipContent>
                 </Tooltip>

@@ -373,49 +373,82 @@
 }
 
 
-/* ── storynest ────────────────────────────────────────────────
- * Cream paper + ink-navy + marigold. The picture-book theme.
- * Custom typography is wired in src/styles.css (EB Garamond / Work Sans / Caveat).
+/* ── storynest v2 ─────────────────────────────────────────────
+ * The colorful redesign. Cool-white page, white cards, multi-accent
+ * (sky / sun / coral / mint / lavender / bubblegum), hard offset
+ * shadows, big radii, illustrated mascots.
+ *
+ * Read `.impeccable.md` before editing. The legacy paper/marigold
+ * tokens stay defined below the new block for backward compat but
+ * NEW work uses the new ones.
  */
 [data-theme="storynest"] {
   color-scheme: light;
-  /* Paper */
-  --color-background: oklch(0.975 0.013 84);
-  --color-foreground: oklch(0.22 0.035 265);
-  --color-card: oklch(0.98 0.011 84);
-  --color-card-foreground: oklch(0.22 0.035 265);
-  --color-popover: oklch(0.98 0.011 84);
-  --color-popover-foreground: oklch(0.22 0.035 265);
-  /* Marigold primary */
-  --color-primary: oklch(0.78 0.155 72);
-  --color-primary-foreground: oklch(0.22 0.035 265);
-  /* Paper-deep secondary */
-  --color-secondary: oklch(0.94 0.022 84);
-  --color-secondary-foreground: oklch(0.22 0.035 265);
-  --color-muted: oklch(0.94 0.022 84);
-  --color-muted-foreground: oklch(0.45 0.030 265);
-  --color-accent: oklch(0.9 0.034 84);
-  --color-accent-foreground: oklch(0.22 0.035 265);
-  /* Rose destructive */
-  --color-destructive: oklch(0.62 0.165 22);
-  --color-destructive-foreground: oklch(0.99 0.005 84);
-  /* Hairline rule */
-  --color-border: oklch(0.88 0.018 84);
-  --color-input: oklch(0.88 0.018 84);
-  --color-ring: oklch(0.78 0.155 72);
-  --radius: 0.5rem;
-  /* Paper shadows */
-  --shadow-card: 0 1px 2px 0 oklch(0.22 0.035 265 / 0.06);
-  --shadow-card-hover: 0 6px 18px -4px oklch(0.22 0.035 265 / 0.10);
-  /* Storynest extras */
-  --storynest-paper: oklch(0.975 0.013 84);
-  --storynest-paper-deep: oklch(0.94 0.022 84);
-  --storynest-ink: oklch(0.22 0.035 265);
-  --storynest-ink-soft: oklch(0.45 0.030 265);
-  --storynest-ink-mute: oklch(0.62 0.020 265);
-  --storynest-rule: oklch(0.88 0.018 84);
-  --storynest-marigold: oklch(0.78 0.155 72);
-  --storynest-marigold-d: oklch(0.65 0.155 60);
-  --storynest-rose: oklch(0.72 0.135 22);
-  --storynest-sage: oklch(0.72 0.075 150);
+  /* shadcn-mapped surface tokens (used by SDK / shadcn primitives) */
+  --color-background: oklch(0.985 0.008 240);
+  --color-foreground: oklch(0.22 0.04 265);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.22 0.04 265);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.22 0.04 265);
+  /* Sky primary (CTA) */
+  --color-primary: oklch(0.72 0.15 235);
+  --color-primary-foreground: oklch(0.99 0.005 240);
+  /* Soft tinted card for secondary surfaces */
+  --color-secondary: oklch(0.96 0.02 240);
+  --color-secondary-foreground: oklch(0.22 0.04 265);
+  --color-muted: oklch(0.96 0.02 240);
+  --color-muted-foreground: oklch(0.50 0.04 265);
+  --color-accent: oklch(0.95 0.04 92);
+  --color-accent-foreground: oklch(0.22 0.04 265);
+  /* Coral destructive */
+  --color-destructive: oklch(0.66 0.18 28);
+  --color-destructive-foreground: oklch(0.99 0.005 240);
+  /* Hairline rule + ring */
+  --color-border: oklch(0.91 0.015 240);
+  --color-input: oklch(0.91 0.015 240);
+  --color-ring: oklch(0.72 0.15 235);
+  --radius: 1rem;
+  /* Hard offset card shadows — picture-book / sticker feel */
+  --shadow-card: 4px 4px 0 0 oklch(0.22 0.04 265 / 0.08);
+  --shadow-card-hover: 6px 6px 0 0 oklch(0.22 0.04 265 / 0.12);
+
+  /* ── storynest v2 brand tokens ── */
+  --storynest-bg: oklch(0.985 0.008 240);
+  --storynest-card: oklch(1 0 0);
+  --storynest-card-soft: oklch(0.97 0.013 240);
+  --storynest-rule: oklch(0.91 0.015 240);
+  --storynest-ink: oklch(0.22 0.04 265);
+  --storynest-ink-soft: oklch(0.40 0.04 265);
+  --storynest-ink-mute: oklch(0.58 0.03 265);
+  --storynest-sky: oklch(0.72 0.15 235);
+  --storynest-sky-deep: oklch(0.55 0.16 235);
+  --storynest-sky-soft: oklch(0.93 0.05 235);
+  --storynest-sun: oklch(0.85 0.16 92);
+  --storynest-sun-deep: oklch(0.72 0.16 78);
+  --storynest-sun-soft: oklch(0.96 0.06 92);
+  --storynest-coral: oklch(0.74 0.16 30);
+  --storynest-coral-deep: oklch(0.62 0.18 28);
+  --storynest-coral-soft: oklch(0.95 0.04 30);
+  --storynest-mint: oklch(0.78 0.12 165);
+  --storynest-mint-deep: oklch(0.62 0.14 162);
+  --storynest-mint-soft: oklch(0.94 0.04 165);
+  --storynest-lavender: oklch(0.75 0.12 295);
+  --storynest-lavender-deep: oklch(0.58 0.14 295);
+  --storynest-lavender-soft: oklch(0.94 0.04 295);
+  --storynest-bubblegum: oklch(0.78 0.16 350);
+  --storynest-bubblegum-deep: oklch(0.62 0.18 350);
+  /* Hard offset shadow recipes — apply as `box-shadow: var(--shadow-sticker)` */
+  --shadow-sticker:   4px 4px 0 0 oklch(0.22 0.04 265 / 0.10);
+  --shadow-sticker-hover: 6px 6px 0 0 oklch(0.22 0.04 265 / 0.14);
+  --shadow-pressed:   0 0 0 0 oklch(0.22 0.04 265 / 0);
+
+  /* ── Legacy aliases — DO NOT use in new work. Kept so older files
+       that still reference the v1 tokens don't paint white-on-white. ── */
+  --storynest-paper: var(--storynest-card);
+  --storynest-paper-deep: var(--storynest-card-soft);
+  --storynest-marigold: var(--storynest-sun);
+  --storynest-marigold-d: var(--storynest-sun-deep);
+  --storynest-rose: var(--storynest-coral);
+  --storynest-sage: var(--storynest-mint);
 }

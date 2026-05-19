@@ -7,6 +7,11 @@
  *   - muted / textVisible UI toggles
  *   - keyboard nav (← → space M T Esc)
  *   - audio playback via AudioPlayer
+ *
+ * v2 chrome refresh: cover + chrome buttons restyled to the sticker
+ * recipe (white bg, ink border, hard-offset shadow, Fredoka titles).
+ * The body layout (image + TextBubble), portal mount, keyboard handler,
+ * audio source resolution, and index space are unchanged.
  */
 
 import {
@@ -15,6 +20,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
@@ -31,6 +37,7 @@ import { useAssetBlobUrl } from '../../lib/assetUrl'
 import { PageImage } from './PageImage'
 import { TextBubble } from './TextBubble'
 import { AudioPlayer, type AudioPlayerHandle } from './AudioPlayer'
+import { Sparkle, Star, Cloud } from '../decor'
 import { cn } from '../ui/utils'
 
 /* ── Minimal row shapes we depend on (avoid coupling to W1's exports). ─── */
@@ -127,7 +134,7 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
       data-testid="reader-root"
       className="fixed inset-0 z-[60] overflow-hidden"
       style={{
-        background: 'var(--storynest-paper)',
+        background: 'var(--storynest-bg)',
         color: 'var(--storynest-ink)',
       }}
     >
@@ -138,16 +145,22 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
         pageKey={currentIndex}
       />
 
-      {/* Top-left: exit */}
+      {/* Top-left: exit — sticker pill */}
       <button
         type="button"
         data-testid="reader-exit"
         onClick={onExit}
-        className="absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2"
+        className="absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-full px-4 py-2 transition-all duration-150 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
         style={{
-          color: 'var(--storynest-ink-mute)',
+          background: 'var(--storynest-card)',
+          color: 'var(--storynest-ink)',
+          border: '1.5px solid var(--storynest-rule)',
+          boxShadow: 'var(--shadow-sticker)',
+          fontFamily: 'var(--storynest-font-body, Nunito), system-ui, sans-serif',
+          fontWeight: 600,
+          fontSize: 13,
           // @ts-expect-error CSS var for focus ring
-          '--tw-ring-color': 'var(--storynest-marigold)',
+          '--tw-ring-color': 'var(--storynest-sky)',
         }}
         aria-label="Exit reader and return to library"
       >
@@ -157,7 +170,7 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
 
       {/* Top-right: text toggle + mute */}
       {currentIndex !== 0 && currentIndex !== lastIndex && (
-        <div className="absolute right-5 top-5 z-20 flex items-center gap-2">
+        <div className="absolute right-5 top-5 z-20 flex items-center gap-2.5">
           <ChromeIconButton
             testId="reader-text-toggle"
             label={textVisible ? 'Hide narration text' : 'Show narration text'}
@@ -225,9 +238,11 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
             onClick={goNext}
           />
           <div
-            className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 select-none"
+            className="absolute bottom-7 left-1/2 -translate-x-1/2 z-20 select-none"
             style={{
+              fontFamily: 'var(--storynest-font-body, Nunito), system-ui, sans-serif',
               fontSize: 12,
+              fontWeight: 600,
               letterSpacing: '0.05em',
               color: 'var(--storynest-ink-mute)',
             }}
@@ -264,23 +279,45 @@ function CoverView({
       data-testid="reader-cover"
       className="absolute inset-0 z-10 flex flex-col items-center justify-center px-6"
     >
-      <div className="flex flex-col items-center max-w-3xl w-full">
+      {/* Background decor — quiet */}
+      <Cloud
+        size={140}
+        style={{ position: 'absolute', top: '8%', left: '6%', opacity: 0.35, zIndex: 0 }}
+      />
+      <Cloud
+        size={110}
+        style={{ position: 'absolute', top: '14%', right: '8%', opacity: 0.3, zIndex: 0 }}
+      />
+      <Star
+        size={48}
+        style={{ position: 'absolute', bottom: '14%', left: '12%', opacity: 0.4, zIndex: 0 }}
+      />
+      <Star
+        size={36}
+        style={{ position: 'absolute', bottom: '22%', right: '14%', opacity: 0.4, zIndex: 0 }}
+      />
+
+      <div className="relative z-10 flex flex-col items-center max-w-3xl w-full">
         <h1
-          className="font-serif text-center"
+          className="text-center"
           style={{
-            fontSize: 'clamp(36px, 5vw, 48px)',
-            fontWeight: 500,
-            lineHeight: 1.15,
+            fontFamily: 'var(--storynest-font-display, Fredoka), system-ui, sans-serif',
+            fontSize: 'clamp(40px, 6vw, 56px)',
+            fontWeight: 600,
+            fontStyle: 'normal',
+            lineHeight: 1.1,
             color: 'var(--storynest-ink)',
+            letterSpacing: '-0.01em',
           }}
         >
           {book.title}
         </h1>
         <p
-          className="font-hand mt-3"
+          className="mt-3"
           style={{
-            fontSize: 28,
-            color: 'var(--storynest-ink-soft)',
+            fontFamily: 'var(--storynest-font-hand, Caveat), cursive',
+            fontSize: 26,
+            color: 'var(--storynest-lavender-deep)',
           }}
         >
           {byline}
@@ -288,13 +325,12 @@ function CoverView({
 
         {book.coverImageKey ? (
           <div
-            className="mt-8 w-full max-w-[420px] aspect-[3/4] rounded-lg overflow-hidden"
+            className="mt-8 w-full max-w-[420px] aspect-[3/4] overflow-hidden"
             style={{
-              background: 'var(--storynest-paper-deep)',
-              borderColor: 'var(--storynest-rule)',
-              borderWidth: 1,
-              borderStyle: 'solid',
-              boxShadow: '0 2px 12px rgba(33,42,80,0.10)',
+              background: 'var(--storynest-card)',
+              border: '1.5px solid var(--storynest-rule)',
+              borderRadius: 24,
+              boxShadow: 'var(--shadow-sticker)',
             }}
           >
             <PageImage
@@ -308,14 +344,30 @@ function CoverView({
         <button
           type="button"
           onClick={onStart}
-          className="mt-10 inline-flex items-center justify-center rounded-lg px-6 py-3 text-[14px] font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+          className="mt-10 inline-flex items-center justify-center rounded-full px-7 py-3.5 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           style={{
-            background: 'var(--storynest-marigold)',
-            color: 'var(--storynest-paper)',
+            background: 'var(--storynest-sky)',
+            color: 'oklch(0.99 0.005 240)',
+            border: 'none',
+            fontFamily: 'var(--storynest-font-display, Fredoka), system-ui, sans-serif',
+            fontWeight: 600,
+            fontSize: 18,
             letterSpacing: '-0.01em',
-            boxShadow: '0 2px 8px rgba(33,42,80,0.12)',
+            boxShadow: '4px 4px 0 0 var(--storynest-sky-deep)',
             // @ts-expect-error CSS var for focus ring
-            '--tw-ring-color': 'var(--storynest-marigold-d)',
+            '--tw-ring-color': 'var(--storynest-sky-deep)',
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 0 0 var(--storynest-sky-deep)'
+            e.currentTarget.style.transform = 'translate(4px, 4px)'
+          }}
+          onMouseUp={(e) => {
+            e.currentTarget.style.boxShadow = '4px 4px 0 0 var(--storynest-sky-deep)'
+            e.currentTarget.style.transform = 'translate(0, 0)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = '4px 4px 0 0 var(--storynest-sky-deep)'
+            e.currentTarget.style.transform = 'translate(0, 0)'
           }}
         >
           Start reading
@@ -354,12 +406,12 @@ function BodyView({
           imageKey={page.imageKey}
           alt={`Illustration for page ${index} of ${total}`}
         />
-        {/* Soft gradient under the text bubble for legibility — paper to transparent */}
+        {/* Soft gradient under the text bubble for legibility */}
         <div
           className="absolute inset-x-0 bottom-0 h-[42%] pointer-events-none"
           style={{
             background:
-              'linear-gradient(to top, oklch(0.975 0.013 84 / 0.55), oklch(0.975 0.013 84 / 0))',
+              'linear-gradient(to top, oklch(0.985 0.008 240 / 0.55), oklch(0.985 0.008 240 / 0))',
           }}
         />
       </button>
@@ -384,42 +436,46 @@ function EndView({
       data-testid="reader-end"
       className="absolute inset-0 z-10 flex flex-col items-center justify-center px-6"
     >
-      <div
-        className="font-serif italic text-center"
-        style={{
-          fontSize: 'clamp(36px, 5vw, 48px)',
-          color: 'var(--storynest-ink)',
-        }}
-      >
-        The End
+      <div className="relative inline-flex items-center justify-center">
+        <Sparkle
+          size={32}
+          style={{ position: 'absolute', top: -28, left: -36, opacity: 0.9 }}
+        />
+        <Sparkle
+          size={24}
+          style={{ position: 'absolute', top: -10, right: -40, opacity: 0.85 }}
+          color="var(--storynest-sun)"
+        />
+        <Sparkle
+          size={28}
+          style={{ position: 'absolute', bottom: -22, right: -28, opacity: 0.85 }}
+          color="var(--storynest-coral)"
+        />
+        <h2
+          className="text-center"
+          style={{
+            fontFamily: 'var(--storynest-font-display, Fredoka), system-ui, sans-serif',
+            fontSize: 'clamp(40px, 6vw, 56px)',
+            fontWeight: 600,
+            fontStyle: 'normal',
+            color: 'var(--storynest-ink)',
+            letterSpacing: '-0.01em',
+          }}
+        >
+          The End
+        </h2>
       </div>
       <div className="mt-10 flex flex-col sm:flex-row items-center gap-3">
-        <button
-          type="button"
+        <PillButton
           onClick={onReplay}
-          className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-[14px] font-medium"
-          style={{
-            background: 'var(--storynest-marigold)',
-            color: 'var(--storynest-paper)',
-            letterSpacing: '-0.01em',
-            boxShadow: '0 2px 8px rgba(33,42,80,0.12)',
-          }}
-        >
-          Read again
-        </button>
-        <button
-          type="button"
+          variant="sky"
+          label="Read again"
+        />
+        <PillButton
           onClick={onExit}
-          className="inline-flex items-center justify-center rounded-lg px-5 py-2.5 text-[14px] font-medium border"
-          style={{
-            background: 'transparent',
-            color: 'var(--storynest-ink)',
-            borderColor: 'var(--storynest-rule)',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          Back to library
-        </button>
+          variant="ghost"
+          label="Back to library"
+        />
       </div>
     </div>
   )
@@ -451,21 +507,21 @@ function ArrowButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'group absolute bottom-6 z-20 flex h-11 w-11 items-center justify-center rounded-full transition-all duration-200',
+        'group absolute bottom-6 z-20 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-150',
         direction === 'left' ? 'left-5' : 'right-5',
-        'opacity-60 hover:opacity-100 disabled:opacity-20 disabled:cursor-not-allowed',
-        'focus:outline-none focus-visible:opacity-100',
+        'disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
       )}
       style={{
-        background: 'var(--storynest-paper-deep)',
+        background: 'var(--storynest-card)',
         color: 'var(--storynest-ink)',
-        borderColor: 'var(--storynest-rule)',
-        borderWidth: 1,
-        borderStyle: 'solid',
-        boxShadow: '0 1px 4px rgba(33,42,80,0.08)',
+        border: '1.5px solid var(--storynest-ink)',
+        boxShadow: 'var(--shadow-sticker)',
+        // @ts-expect-error CSS var for focus ring
+        '--tw-ring-color': 'var(--storynest-sky)',
       }}
     >
-      <Icon className="h-4 w-4" aria-hidden />
+      <Icon className="h-5 w-5" aria-hidden />
     </button>
   )
 }
@@ -491,21 +547,77 @@ function ChromeIconButton({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-150',
-        'hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1',
-        pressed ? 'opacity-100' : 'opacity-70',
+        'inline-flex h-9 w-9 items-center justify-center rounded-full transition-all duration-150',
+        'hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
       )}
       style={{
-        background: 'var(--storynest-paper-deep)',
+        background: pressed ? 'var(--storynest-sky-soft)' : 'var(--storynest-card)',
         color: 'var(--storynest-ink)',
-        borderColor: 'var(--storynest-rule)',
-        borderWidth: 1,
-        borderStyle: 'solid',
+        border: '1.5px solid var(--storynest-ink)',
+        boxShadow: 'var(--shadow-sticker)',
         // @ts-expect-error CSS var for focus ring
-        '--tw-ring-color': 'var(--storynest-marigold)',
+        '--tw-ring-color': 'var(--storynest-sky)',
       }}
     >
       {children}
+    </button>
+  )
+}
+
+/* End-card buttons — pill recipe matching the cover CTA. */
+function PillButton({
+  onClick,
+  variant,
+  label,
+}: {
+  onClick: () => void
+  variant: 'sky' | 'ghost'
+  label: string
+}) {
+  const sky: CSSProperties = {
+    background: 'var(--storynest-sky)',
+    color: 'oklch(0.99 0.005 240)',
+    border: 'none',
+    boxShadow: '4px 4px 0 0 var(--storynest-sky-deep)',
+  }
+  const ghost: CSSProperties = {
+    background: 'var(--storynest-card)',
+    color: 'var(--storynest-ink)',
+    border: '1.5px solid var(--storynest-ink)',
+    boxShadow: 'var(--shadow-sticker)',
+  }
+  const baseStyle = variant === 'sky' ? sky : ghost
+  const shadowKey = variant === 'sky'
+    ? '4px 4px 0 0 var(--storynest-sky-deep)'
+    : 'var(--shadow-sticker)'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center rounded-full px-6 py-3 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      style={{
+        ...baseStyle,
+        fontFamily: 'var(--storynest-font-display, Fredoka), system-ui, sans-serif',
+        fontWeight: 600,
+        fontSize: 16,
+        letterSpacing: '-0.01em',
+        // @ts-expect-error CSS var for focus ring
+        '--tw-ring-color': 'var(--storynest-sky-deep)',
+      }}
+      onMouseDown={(e) => {
+        e.currentTarget.style.boxShadow = '0 0 0 0 transparent'
+        e.currentTarget.style.transform = 'translate(4px, 4px)'
+      }}
+      onMouseUp={(e) => {
+        e.currentTarget.style.boxShadow = shadowKey
+        e.currentTarget.style.transform = 'translate(0, 0)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = shadowKey
+        e.currentTarget.style.transform = 'translate(0, 0)'
+      }}
+    >
+      {label}
     </button>
   )
 }

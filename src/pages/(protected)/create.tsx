@@ -20,6 +20,7 @@ import { Coins } from 'lucide-react'
 import { useToast } from '../../components/ui'
 import { CreateWizard, type CreateWizardValues } from '../../components/storybook/CreateWizard'
 import { GenerationProgress } from '../../components/storybook/GenerationProgress'
+import { Cloud, Star } from '../../components/decor'
 import { runStorybookPipeline, type Storybook, type Page } from '../../lib/pipeline'
 import { callAction } from '../../lib/callAction'
 import { useCreditAccount } from '../../lib/useCreditAccount'
@@ -118,59 +119,100 @@ export default function Create() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-6 py-12 sm:py-16">
-      <header className="mb-8">
-        <h1
-          className="font-serif text-[33px] leading-tight"
-          style={{ color: 'var(--storynest-ink, var(--color-foreground))' }}
-        >
-          Create a new story
-        </h1>
-        <p
-          className="mt-2 text-sm"
-          style={{ color: 'var(--storynest-ink-mute)' }}
-        >
-          Tell us a little about it. We will sketch, illustrate, and narrate.
-        </p>
-        <div
-          className="mt-4 inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px]"
-          style={{
-            background: 'var(--storynest-paper-deep)',
-            border: '1px solid var(--storynest-rule)',
-            color: 'var(--storynest-ink, var(--color-foreground))',
-          }}
-          data-testid="create-credit-hint"
-        >
-          <Coins
-            className="h-3.5 w-3.5"
-            aria-hidden
-            style={{ color: 'var(--storynest-marigold-d)' }}
-          />
-          <span>
-            {account.isOwner
-              ? 'Admin · unlimited credits'
-              : `1 credit per page · ${account.balance} credits available`}
-          </span>
-          {!account.isOwner && (
-            <Link
-              to="/upgrade"
-              className="ml-1 underline"
-              style={{ color: 'var(--storynest-marigold-d)' }}
-            >
-              Buy more
-            </Link>
-          )}
-        </div>
-      </header>
+    <div className="relative mx-auto max-w-2xl px-6 py-12 sm:py-16">
+      {/* Decorative shapes scattered behind the form */}
+      <Cloud
+        size={140}
+        className="pointer-events-none absolute"
+        style={{ top: 20, left: -60, opacity: 0.65, zIndex: 0 }}
+      />
+      <Cloud
+        size={110}
+        className="pointer-events-none absolute"
+        style={{ top: 220, right: -40, opacity: 0.6, zIndex: 0 }}
+      />
+      <Star
+        size={48}
+        className="pointer-events-none absolute"
+        style={{ top: 80, right: 40, opacity: 0.7, zIndex: 0 }}
+      />
 
-      <div
-        className="rounded-lg p-6 sm:p-8"
-        style={{
-          background: 'var(--storynest-paper-deep)',
-          border: '1px solid var(--storynest-rule)',
-        }}
-      >
-        <CreateWizard onSubmit={onSubmit} disabled={busy} />
+      <div className="relative" style={{ zIndex: 1 }}>
+        <header className="mb-8">
+          <h1
+            className="font-display leading-tight"
+            style={{
+              color: 'var(--storynest-ink)',
+              fontSize: 40,
+              fontWeight: 600,
+            }}
+          >
+            Create a new story
+          </h1>
+          <p
+            className="font-hand mt-1"
+            style={{
+              fontSize: 20,
+              color: 'var(--storynest-ink-mute)',
+            }}
+          >
+            made just for them
+          </p>
+
+          <div
+            className="mt-5 inline-flex items-center gap-2.5 px-4 py-2.5"
+            style={{
+              background: 'var(--storynest-sun-soft)',
+              borderTop: '1.5px solid var(--storynest-rule)',
+              borderRight: '1.5px solid var(--storynest-rule)',
+              borderBottom: '1.5px solid var(--storynest-rule)',
+              borderLeft: '5px solid var(--storynest-sun-deep)',
+              borderRadius: 16,
+              boxShadow: 'var(--shadow-sticker)',
+              color: 'var(--storynest-ink)',
+              fontFamily: 'Nunito, system-ui, sans-serif',
+              fontSize: 14,
+              fontWeight: 600,
+            }}
+            data-testid="create-credit-hint"
+          >
+            <Coins
+              className="h-4 w-4"
+              aria-hidden
+              style={{ color: 'var(--storynest-sun-deep)' }}
+            />
+            <span>
+              {account.isOwner
+                ? 'Admin · unlimited credits'
+                : `1 credit per page · ${account.balance} credits available`}
+            </span>
+            {!account.isOwner && (
+              <Link
+                to="/upgrade"
+                className="ml-1"
+                style={{
+                  color: 'var(--storynest-sky-deep)',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 3,
+                }}
+              >
+                Buy more
+              </Link>
+            )}
+          </div>
+        </header>
+
+        <div
+          style={{
+            background: 'var(--storynest-card)',
+            border: '1.5px solid var(--storynest-rule)',
+            borderRadius: 24,
+            padding: 36,
+            boxShadow: 'var(--shadow-sticker)',
+          }}
+        >
+          <CreateWizard onSubmit={onSubmit} disabled={busy} />
+        </div>
       </div>
     </div>
   )
