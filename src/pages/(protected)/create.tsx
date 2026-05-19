@@ -122,8 +122,11 @@ export default function Create() {
   return (
     <div className="mx-auto flex max-w-[1400px] items-start gap-8 px-2">
       {/* Side mascot — Hootie reading along, sways slowly as if turning
-          pages. Tap him to hear a thought. */}
-      <aside className="hidden 2xl:block w-[170px] shrink-0 pt-32">
+          pages. Sticky so he keeps reading along as the wizard scrolls. */}
+      <aside
+        className="hidden 2xl:block w-[170px] shrink-0 self-start sticky"
+        style={{ top: 120 }}
+      >
         <InteractiveMascot
           variant="reading"
           size={150}
@@ -239,8 +242,12 @@ export default function Create() {
       </div>
       </div>
 
-      {/* Right margin — a small sleeping Hootie for atmosphere. */}
-      <aside className="hidden 2xl:flex w-[150px] shrink-0 flex-col items-center pt-72">
+      {/* Right margin — a small sleeping Hootie for atmosphere. Sticky
+          with a deeper offset so he sits below the left mascot. */}
+      <aside
+        className="hidden 2xl:flex w-[150px] shrink-0 flex-col items-center self-start sticky"
+        style={{ top: 260 }}
+      >
         <InteractiveMascot
           variant="sleeping"
           size={120}

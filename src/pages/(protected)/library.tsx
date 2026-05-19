@@ -26,8 +26,12 @@ export default function Library() {
 
   return (
     <div className="mx-auto flex max-w-[1500px] items-start gap-6 px-2">
-      {/* Side mascot — left greeter, tappable. */}
-      <aside className="hidden 2xl:block w-[170px] shrink-0 pt-28">
+      {/* Side mascot — left greeter, tappable. Sticky to the viewport
+          so he stays visible as the user scrolls the book grid. */}
+      <aside
+        className="hidden 2xl:block w-[170px] shrink-0 self-start sticky"
+        style={{ top: 110 }}
+      >
         <InteractiveMascot
           variant="waving"
           size={140}
@@ -112,8 +116,12 @@ export default function Library() {
       </div>
 
       {/* Side mascot — right side, drowsing. Slower float keeps it
-          out of sync with the left mascot so it doesn't look mechanical. */}
-      <aside className="hidden 2xl:block w-[150px] shrink-0 pt-44">
+          out of sync with the left mascot. Sticky with a slightly larger
+          offset so it sits a beat below his counterpart. */}
+      <aside
+        className="hidden 2xl:block w-[150px] shrink-0 self-start sticky"
+        style={{ top: 180 }}
+      >
         <InteractiveMascot
           variant="sleeping"
           size={130}
