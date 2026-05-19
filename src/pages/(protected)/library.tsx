@@ -24,7 +24,26 @@ export default function Library() {
   })
 
   return (
-    <div data-testid="library" className="mx-auto max-w-6xl px-6 py-14">
+    <div className="mx-auto flex max-w-[1500px] items-start gap-6 px-2">
+      {/* Side mascot — left greeter, only shown when there's real margin space.
+          The library is the user's home base, so Hootie waves whenever they
+          drop in. */}
+      <aside
+        aria-hidden
+        className="hidden 2xl:block w-[150px] shrink-0 pt-28"
+      >
+        <div className="relative">
+          <Hootie variant="waving" size={140} className="mascot-bob" />
+          <div
+            className="font-hand mt-2 text-center text-[18px]"
+            style={{ color: 'var(--storynest-coral-deep)' }}
+          >
+            welcome back
+          </div>
+        </div>
+      </aside>
+
+      <div data-testid="library" className="min-w-0 flex-1 px-4 py-14 max-w-6xl">
       <header className="relative mb-12 flex flex-wrap items-baseline justify-between gap-4">
         <Heart
           size={40}
@@ -88,6 +107,18 @@ export default function Library() {
           ))}
         </div>
       )}
+      </div>
+
+      {/* Side mascot — right side, drowsing. Slower float so the two
+          mascots aren't synchronized (would look mechanical). */}
+      <aside
+        aria-hidden
+        className="hidden 2xl:block w-[150px] shrink-0 pt-44"
+      >
+        <div className="relative">
+          <Hootie variant="sleeping" size={130} className="mascot-float" />
+        </div>
+      </aside>
     </div>
   )
 }

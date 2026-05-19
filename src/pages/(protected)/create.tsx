@@ -21,6 +21,7 @@ import { useToast } from '../../components/ui'
 import { CreateWizard, type CreateWizardValues } from '../../components/storybook/CreateWizard'
 import { GenerationProgress } from '../../components/storybook/GenerationProgress'
 import { Cloud, Star } from '../../components/decor'
+import { Hootie } from '../../components/mascots/Hootie'
 import { runStorybookPipeline, type Storybook, type Page } from '../../lib/pipeline'
 import { callAction } from '../../lib/callAction'
 import { useCreditAccount } from '../../lib/useCreditAccount'
@@ -119,7 +120,23 @@ export default function Create() {
   }
 
   return (
-    <div className="relative mx-auto max-w-2xl px-6 py-12 sm:py-16">
+    <div className="mx-auto flex max-w-[1400px] items-start gap-8 px-2">
+      {/* Side mascot — Hootie reading along, sways slowly as if turning pages.
+          Hidden below 2xl so it never crowds the form on narrow viewports. */}
+      <aside
+        aria-hidden
+        className="hidden 2xl:block w-[150px] shrink-0 pt-32"
+      >
+        <Hootie variant="reading" size={150} className="mascot-sway" />
+        <div
+          className="font-hand mt-2 text-center text-[17px]"
+          style={{ color: 'var(--storynest-lavender-deep)' }}
+        >
+          tell us your idea
+        </div>
+      </aside>
+
+      <div className="relative mx-auto w-full max-w-2xl px-6 py-12 sm:py-16">
       {/* Decorative shapes scattered behind the form */}
       <Cloud
         size={140}
@@ -214,6 +231,15 @@ export default function Create() {
           <CreateWizard onSubmit={onSubmit} disabled={busy} />
         </div>
       </div>
+      </div>
+
+      {/* Right margin — a small sleeping Hootie + moon for atmosphere. */}
+      <aside
+        aria-hidden
+        className="hidden 2xl:flex w-[150px] shrink-0 flex-col items-center pt-72"
+      >
+        <Hootie variant="sleeping" size={120} className="mascot-float" />
+      </aside>
     </div>
   )
 }

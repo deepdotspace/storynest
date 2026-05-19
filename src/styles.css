@@ -199,6 +199,38 @@
     font-weight: 600;
   }
 
+  /* ── Mascot animations ────────────────────────────────────────────
+     Used by the Hootie placements scattered through the app. All keep
+     reduced-motion users still — `prefers-reduced-motion: reduce`
+     halts the loop and the mascot rests in its base pose. */
+  @keyframes mascot-bob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+  @keyframes mascot-sway {
+    0%, 100% { transform: rotate(-2.5deg) translateY(0); }
+    50%      { transform: rotate(2.5deg) translateY(-4px); }
+  }
+  @keyframes mascot-peek {
+    0%, 88%  { transform: translateX(0) rotate(0deg); }
+    92%      { transform: translateX(-4px) rotate(-4deg); }
+    96%      { transform: translateX(4px) rotate(4deg); }
+    100%     { transform: translateX(0) rotate(0deg); }
+  }
+  @keyframes mascot-float {
+    0%, 100% { transform: translateY(0) rotate(-1deg); }
+    50%      { transform: translateY(-6px) rotate(1deg); }
+  }
+  .mascot-bob   { animation: mascot-bob 3.5s ease-in-out infinite; }
+  .mascot-sway  { animation: mascot-sway 5.5s ease-in-out infinite; }
+  .mascot-peek  { animation: mascot-peek 9s ease-in-out infinite; }
+  .mascot-float { animation: mascot-float 4.5s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .mascot-bob, .mascot-sway, .mascot-peek, .mascot-float {
+      animation: none;
+    }
+  }
+
   /* Scrollbar styling */
   ::-webkit-scrollbar {
     width: 6px;
