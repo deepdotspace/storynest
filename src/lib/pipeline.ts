@@ -1,10 +1,10 @@
 /**
- * Storybook generation pipeline — orchestrated on the client because the
- * R2 hook lives in the React tree. Each step calls a server action for
- * the AI work, then uploads the bytes to R2 from the browser.
+ * Single-page re-roll helpers used by the per-page editor (/book/:id/edit).
  *
- * On any R2 upload 401 (dev-only), we surface a toast and continue —
- * text-only iteration still completes.
+ * The full storybook pipeline now runs server-side in AppJobRoom (see
+ * src/server/jobs/storybookJob.ts). These functions are the smaller
+ * one-shot variants the editor calls directly from the browser when the
+ * user re-rolls a single page's image or audio.
  */
 
 import type { ActionResult } from './callAction'
@@ -16,16 +16,8 @@ import {
   type ArtStyle,
 } from '../plans'
 
-/* ── shared types ───────────────────────────────────────────────────── */
-
-export interface PipelineParams {
-  prompt: string
-  characters: string
-  lesson: string
-  ageBand: AgeBand
-  pageCount: number
-  artStyle: ArtStyle
-}
+/* ── shared types — re-exported so other modules keep importing from
+ *    this stable location. ────────────────────────────────────────── */
 
 export interface Storybook {
   title: string
@@ -51,50 +43,33 @@ export interface Page {
   imageKey: string
   audioKey: string
   status: 'pending' | 'text-ready' | 'image-ready' | 'ready' | 'failed'
+  failureReason?: string
   visibility: 'public' | 'private'
-}
-
-interface OutlineResp {
-  title: string
-  characterSheet: string
-  pages: Array<{ pageNumber: number; text: string; imagePrompt: string }>
 }
 
 interface ImageResp { base64Png: string }
 interface AudioResp { base64Mp3: string }
 interface UploadResult { success: boolean; key?: string; url?: string; error?: string }
 
+/** Caller surface: the rerolls only need `put`, but the SDK's
+ * useMutations<T>() return value also exposes `create` and `remove`.
+ * Accept them so callers can pass the whole object without picking. */
 interface Mutations<T> {
-  create: (data: T) => Promise<string>
   put: (recordId: string, data: Partial<T>) => Promise<void>
-  remove: (recordId: string) => Promise<void>
+  create?: unknown
+  remove?: unknown
 }
 
-export interface PipelineDeps {
-  params: PipelineParams
-  callAction: <T>(name: string, body: unknown) => Promise<ActionResult<T>>
-  mutations: {
-    books: Mutations<Storybook>
-    pages: Mutations<Page>
-  }
-  r2: {
-    uploadBase64: (b64: string, key: string, mime?: string) => Promise<UploadResult>
-  }
-  onBookCreated?: (bookId: string) => void
-  onProgress?: (info: { stage: string; current: number; total: number; message?: string }) => void
-  onUploadFailure?: (message: string) => void
+interface R2 {
+  uploadBase64: (b64: string, key: string, mime?: string) => Promise<UploadResult>
 }
 
-export interface PipelineOutcome {
-  bookId: string | null
-  ok: boolean
-  error?: string
-}
+type CallAction = <T>(name: string, body: unknown) => Promise<ActionResult<T>>
 
-/* ── helpers ────────────────────────────────────────────────────────── */
+/* ── single-page re-rolls ───────────────────────────────────────────── */
 
 async function tryUpload(
-  r2: PipelineDeps['r2'],
+  r2: R2,
   base64: string,
   key: string,
   mime: string,
@@ -103,204 +78,28 @@ async function tryUpload(
   try {
     const res = await r2.uploadBase64(base64, key, mime)
     if (res.success && res.key) return res.key
-    const msg = res.error || 'Upload failed'
-    onFail?.(msg)
+    onFail?.(res.error || 'Upload failed')
     return ''
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    onFail?.(msg)
+    onFail?.(err instanceof Error ? err.message : String(err))
     return ''
   }
 }
 
-function clampProgress(n: number): number {
-  if (!Number.isFinite(n)) return 0
-  return Math.max(0, Math.min(100, Math.round(n)))
+async function reserveOne(callAction: CallAction): Promise<{ ok: true } | { ok: false; error: string }> {
+  const res = await callAction<{ balance: number }>('reserveCredits', { amount: 1 })
+  if (!res.success) return { ok: false, error: res.error || 'Could not reserve credit' }
+  return { ok: true }
 }
 
-/* ── pipeline ───────────────────────────────────────────────────────── */
-
-export async function runStorybookPipeline(deps: PipelineDeps): Promise<PipelineOutcome> {
-  const { params, callAction, mutations, r2, onBookCreated, onProgress, onUploadFailure } = deps
-  let bookId: string | null = null
-
-  let creditsReserved = 0
-
-  try {
-    /* 0. reserve credits up-front. 2 credits per page (image + audio).
-       Cover is bundled — no extra charge. */
-    const cost = (params.pageCount | 0) * 2
-    const reserveRes = await callAction<{ balance: number; insufficient?: boolean }>(
-      'reserveCredits',
-      { amount: cost },
-    )
-    if (!reserveRes.success) {
-      return { bookId, ok: false, error: reserveRes.error || 'Could not reserve credits' }
-    }
-    creditsReserved = cost
-
-    /* 1. outline */
-    onProgress?.({ stage: 'outlining', current: 0, total: params.pageCount, message: 'Sketching your story' })
-    const outlineRes = await callAction<OutlineResp>('outlineStorybook', params)
-    if (!outlineRes.success) {
-      // Refund — the user got nothing useful.
-      if (creditsReserved > 0) {
-        await callAction('refundCredits', { amount: creditsReserved })
-        creditsReserved = 0
-      }
-      return { bookId, ok: false, error: outlineRes.error }
-    }
-    const outline = outlineRes.data
-
-    /* 2. create book row */
-    bookId = await mutations.books.create({
-      title: outline.title,
-      prompt: params.prompt,
-      characters: params.characters,
-      lesson: params.lesson,
-      ageBand: params.ageBand,
-      pageCount: params.pageCount,
-      artStyle: params.artStyle,
-      coverImageKey: '',
-      status: 'outlining',
-      failureReason: '',
-      progress: 5,
-      visibility: 'public',
-      characterSheet: outline.characterSheet || '',
-    })
-    onBookCreated?.(bookId)
-
-    /* 3. flip to illustrating */
-    await mutations.books.put(bookId, { status: 'illustrating', progress: 10 })
-
-    /* 4. create page rows in parallel; capture ids */
-    const pageCreates = outline.pages.map((p) =>
-      mutations.pages.create({
-        bookId: bookId!,
-        pageNumber: p.pageNumber,
-        text: p.text,
-        imagePrompt: p.imagePrompt,
-        imageKey: '',
-        audioKey: '',
-        status: 'text-ready',
-        visibility: 'public',
-      }).then((recordId) => ({ recordId, page: p })),
-    )
-    const createdPages = await Promise.all(pageCreates)
-    const totalUnits = createdPages.length * 2 + 1 // images + audios + cover
-    let doneUnits = 0
-
-    /* 5. cover image */
-    const coverRes = await callAction<ImageResp>('generatePageImage', {
-      artStyle: params.artStyle,
-      imagePrompt: '',
-      characterSheet: outline.characterSheet || '',
-      asCover: { title: outline.title, characters: params.characters },
-    })
-    if (coverRes.success) {
-      const key = await tryUpload(
-        r2,
-        coverRes.data.base64Png,
-        coverImageKey(bookId),
-        'image/png',
-        onUploadFailure,
-      )
-      if (key) await mutations.books.put(bookId, { coverImageKey: key })
-    }
-    doneUnits += 1
-    await mutations.books.put(bookId, {
-      progress: clampProgress(10 + ((doneUnits / totalUnits) * 80)),
-    })
-
-    /* 6. per-page image then audio */
-    for (const { recordId, page } of createdPages) {
-      onProgress?.({
-        stage: 'illustrating',
-        current: page.pageNumber,
-        total: params.pageCount,
-        message: `Painting page ${page.pageNumber}`,
-      })
-
-      const imgRes = await callAction<ImageResp>('generatePageImage', {
-        imagePrompt: page.imagePrompt,
-        artStyle: params.artStyle,
-        characterSheet: outline.characterSheet || '',
-      })
-      if (imgRes.success) {
-        const key = await tryUpload(
-          r2,
-          imgRes.data.base64Png,
-          pageImageKey(bookId, page.pageNumber),
-          'image/png',
-          onUploadFailure,
-        )
-        await mutations.pages.put(recordId, {
-          imageKey: key,
-          status: 'image-ready',
-        })
-      } else {
-        await mutations.pages.put(recordId, { status: 'failed' })
-      }
-      doneUnits += 1
-      await mutations.books.put(bookId, {
-        progress: clampProgress(10 + ((doneUnits / totalUnits) * 80)),
-      })
-
-      onProgress?.({
-        stage: 'narrating',
-        current: page.pageNumber,
-        total: params.pageCount,
-        message: `Recording page ${page.pageNumber}`,
-      })
-
-      await mutations.books.put(bookId, { status: 'narrating' })
-
-      const audioRes = await callAction<AudioResp>('generatePageAudio', { text: page.text })
-      if (audioRes.success) {
-        const akey = await tryUpload(
-          r2,
-          audioRes.data.base64Mp3,
-          pageAudioKey(bookId, page.pageNumber),
-          'audio/mpeg',
-          onUploadFailure,
-        )
-        await mutations.pages.put(recordId, {
-          audioKey: akey,
-          status: 'ready',
-        })
-      } else {
-        await mutations.pages.put(recordId, { status: 'failed' })
-      }
-      doneUnits += 1
-      await mutations.books.put(bookId, {
-        progress: clampProgress(10 + ((doneUnits / totalUnits) * 80)),
-      })
-    }
-
-    /* 7. done */
-    await mutations.books.put(bookId, { status: 'ready', progress: 100 })
-    onProgress?.({
-      stage: 'ready',
-      current: params.pageCount,
-      total: params.pageCount,
-      message: 'Your story is ready',
-    })
-    return { bookId, ok: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (bookId) {
-      try { await deps.mutations.books.put(bookId, { status: 'failed', failureReason: msg }) } catch { /* ignore */ }
-    }
-    return { bookId, ok: false, error: msg }
-  }
+async function refundOne(callAction: CallAction): Promise<void> {
+  await callAction('refundCredits', { amount: 1 })
 }
-
-/* ── single-page re-rolls (used by the edit page) ───────────────────── */
 
 export async function rerollPageImage(args: {
-  callAction: PipelineDeps['callAction']
+  callAction: CallAction
   pagesMutations: Mutations<Page>
-  r2: PipelineDeps['r2']
+  r2: R2
   page: { recordId: string; bookId: string; pageNumber: number; imagePrompt: string }
   artStyle: ArtStyle
   characterSheet?: string
@@ -325,31 +124,19 @@ export async function rerollPageImage(args: {
     'image/png',
     onUploadFailure,
   )
-  if (key) await pagesMutations.put(page.recordId, { imageKey: key })
+  if (!key) {
+    // AI succeeded, upload failed — user got nothing visible. Refund.
+    await refundOne(callAction)
+    return { ok: false, error: 'Upload failed' }
+  }
+  await pagesMutations.put(page.recordId, { imageKey: key })
   return { ok: true }
-}
-
-/**
- * Reserve one credit before a re-roll, refund if the integration call
- * fails (so users only pay for actual successful re-generations).
- * Server-side, the owner bypass kicks in and the deduction is a no-op.
- */
-async function reserveOne(
-  callAction: PipelineDeps['callAction'],
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const res = await callAction<{ balance: number }>('reserveCredits', { amount: 1 })
-  if (!res.success) return { ok: false, error: res.error || 'Could not reserve credit' }
-  return { ok: true }
-}
-
-async function refundOne(callAction: PipelineDeps['callAction']) {
-  await callAction('refundCredits', { amount: 1 })
 }
 
 export async function rerollCover(args: {
-  callAction: PipelineDeps['callAction']
+  callAction: CallAction
   booksMutations: Mutations<Storybook>
-  r2: PipelineDeps['r2']
+  r2: R2
   book: { recordId: string; title: string; characters: string; artStyle: ArtStyle; characterSheet?: string }
   onUploadFailure?: (msg: string) => void
 }): Promise<{ ok: boolean; error?: string }> {
@@ -373,14 +160,18 @@ export async function rerollCover(args: {
     'image/png',
     onUploadFailure,
   )
-  if (key) await booksMutations.put(book.recordId, { coverImageKey: key })
+  if (!key) {
+    await refundOne(callAction)
+    return { ok: false, error: 'Upload failed' }
+  }
+  await booksMutations.put(book.recordId, { coverImageKey: key })
   return { ok: true }
 }
 
 export async function rerollPageAudio(args: {
-  callAction: PipelineDeps['callAction']
+  callAction: CallAction
   pagesMutations: Mutations<Page>
-  r2: PipelineDeps['r2']
+  r2: R2
   page: { recordId: string; bookId: string; pageNumber: number; text: string }
   onUploadFailure?: (msg: string) => void
 }): Promise<{ ok: boolean; error?: string }> {
@@ -399,6 +190,10 @@ export async function rerollPageAudio(args: {
     'audio/mpeg',
     onUploadFailure,
   )
-  if (key) await pagesMutations.put(page.recordId, { audioKey: key })
+  if (!key) {
+    await refundOne(callAction)
+    return { ok: false, error: 'Upload failed' }
+  }
+  await pagesMutations.put(page.recordId, { audioKey: key })
   return { ok: true }
 }

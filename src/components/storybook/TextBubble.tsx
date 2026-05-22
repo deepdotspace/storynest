@@ -24,14 +24,18 @@ export function TextBubble({ text, visible, className }: TextBubbleProps) {
         visible ? 'opacity-100' : 'opacity-0',
         className,
       )}
-      style={{ maxWidth: 680 }}
+      // Wide horizontal strip — fills most of the viewport so the
+      // narration reads in 1–2 lines rather than wrapping into a tall
+      // square. Capped at 1500px so it doesn't stretch to absurd
+      // widths on ultra-wide screens.
+      style={{ maxWidth: 1500 }}
     >
       <div
-        className="px-7 py-7 sm:px-10 sm:py-8"
+        className="px-7 py-4 sm:px-10 sm:py-5"
         style={{
           background: 'oklch(1 0 0 / 0.96)',
           border: '2px solid var(--storynest-sky-soft)',
-          borderRadius: 24,
+          borderRadius: 20,
           boxShadow: 'var(--shadow-sticker)',
           color: 'var(--storynest-ink)',
         }}
@@ -40,9 +44,9 @@ export function TextBubble({ text, visible, className }: TextBubbleProps) {
           className="text-center"
           style={{
             fontFamily: 'var(--storynest-font-body, Nunito), system-ui, sans-serif',
-            fontSize: 24,
+            fontSize: 22,
             fontWeight: 500,
-            lineHeight: 1.55,
+            lineHeight: 1.45,
             fontStyle: 'normal',
           }}
         >

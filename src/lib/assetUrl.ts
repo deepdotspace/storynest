@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { useR2Files } from 'deepspace'
+import { useR2Files, getAuthToken } from 'deepspace'
 
 export interface AssetBlobUrlState {
   url: string | null
@@ -23,15 +23,32 @@ export interface AssetBlobUrlState {
   error: string | null
 }
 
+export interface AssetBlobUrlOptions {
+  /**
+   * When set, route the read through `/api/book-files/<key>?bookId=<id>`
+   * instead of the SDK's `readFile`. Required for any cross-user read
+   * (e.g. viewing someone else's public book from /explore) because
+   * the SDK's `readFile` always uses scope=self and 403s on another
+   * user's prefix. Server-side this endpoint validates the book is
+   * public AND the key is one of its known assets.
+   */
+  publicBookId?: string
+}
+
 /**
- * Fetches the file via authenticated `readFile()` and exposes a
- * `blob:` URL. Re-runs when `key` changes. Revokes the blob URL on
- * cleanup so we don't leak.
+ * Fetches the file and exposes a `blob:` URL. Re-runs when `key` (or
+ * `publicBookId`) changes. Revokes the blob URL on cleanup so we don't
+ * leak.
  */
-export function useAssetBlobUrl(key: string | null | undefined): AssetBlobUrlState {
+export function useAssetBlobUrl(
+  key: string | null | undefined,
+  options?: AssetBlobUrlOptions,
+): AssetBlobUrlState {
   const { readFile } = useR2Files()
   const readFileRef = useRef(readFile)
   readFileRef.current = readFile
+
+  const publicBookId = options?.publicBookId ?? null
 
   const [state, setState] = useState<AssetBlobUrlState>({
     url: null,
@@ -49,7 +66,18 @@ export function useAssetBlobUrl(key: string | null | undefined): AssetBlobUrlSta
     setState((s) => ({ ...s, isLoading: true, error: null }))
     ;(async () => {
       try {
-        const resp = await readFileRef.current(key)
+        let resp: Response
+        if (publicBookId) {
+          const params = new URLSearchParams({ bookId: publicBookId })
+          let token: string | null = null
+          try { token = await getAuthToken() } catch { token = null }
+          resp = await fetch(
+            `/api/book-files/${key}?${params.toString()}`,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+          )
+        } else {
+          resp = await readFileRef.current(key)
+        }
         if (canceled) return
         if (!resp.ok) {
           setState({ url: null, isLoading: false, error: `HTTP ${resp.status}` })
@@ -73,7 +101,7 @@ export function useAssetBlobUrl(key: string | null | undefined): AssetBlobUrlSta
       canceled = true
       if (createdUrl) URL.revokeObjectURL(createdUrl)
     }
-  }, [key])
+  }, [key, publicBookId])
 
   return state
 }

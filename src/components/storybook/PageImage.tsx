@@ -14,10 +14,14 @@ interface PageImageProps {
   className?: string
   /** When set, image uses object-contain instead of object-cover. */
   contain?: boolean
+  /** Cross-user public-book reads route through `/api/book-files/`
+   * instead of the SDK's scope=self `readFile`. Required when the
+   * caller is not the book's owner (e.g. /explore viewers). */
+  publicBookId?: string
 }
 
-export function PageImage({ imageKey, alt, className, contain }: PageImageProps) {
-  const { url, isLoading, error } = useAssetBlobUrl(imageKey)
+export function PageImage({ imageKey, alt, className, contain, publicBookId }: PageImageProps) {
+  const { url, isLoading, error } = useAssetBlobUrl(imageKey, { publicBookId })
   const [loaded, setLoaded] = useState(false)
 
   // Reset loaded state when the underlying url changes (so the fade re-plays).
@@ -60,6 +64,12 @@ export function PageImage({ imageKey, alt, className, contain }: PageImageProps)
         loaded ? 'opacity-100' : 'opacity-0',
         className,
       )}
+      // When cropping (`object-cover`), anchor to the top so the
+      // safe-area-prompted faces (composed in the upper two-thirds of
+      // the frame) stay visible on viewports narrower than the
+      // generated 16:9. `object-contain` is unaffected — there's no
+      // crop to anchor.
+      style={contain ? undefined : { objectPosition: 'center top' }}
     />
   )
 }

@@ -19,6 +19,10 @@ interface Props {
   artStyle: ArtStyle
   characterSheet?: string
   pagesPut: (recordId: string, data: Partial<Page>) => Promise<void>
+  /** When false, render read-only: no reroll buttons, no inline text
+   * edit. Used when a non-author / non-admin viewer opens the page from
+   * /explore. Defaults to true for back-compat with library usage. */
+  canEdit?: boolean
 }
 
 interface StatusPill {
@@ -185,10 +189,14 @@ function PrimaryPill({
   )
 }
 
-export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, pagesPut }: Props) {
+export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, pagesPut, canEdit = true }: Props) {
   const toast = useToast()
   const r2 = useR2Files()
-  const { url: imgUrl } = useAssetBlobUrl(page.imageKey)
+  // When the viewer isn't the author, the asset lives under another
+  // user's prefix — fetch via the cross-user public-book endpoint.
+  const { url: imgUrl } = useAssetBlobUrl(page.imageKey, {
+    publicBookId: canEdit ? undefined : bookId,
+  })
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(page.text)
@@ -355,7 +363,7 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
           </span>
         </div>
 
-        {editing ? (
+        {editing && canEdit ? (
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -375,7 +383,7 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
               boxShadow: 'none',
             }}
           />
-        ) : (
+        ) : canEdit ? (
           <button
             type="button"
             onClick={() => { setDraft(page.text); setEditing(true) }}
@@ -395,8 +403,24 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
               )}
             </p>
           </button>
+        ) : (
+          <p
+            data-testid={`page-text-${page.pageNumber}`}
+            className="p-3"
+            style={{
+              fontFamily: 'Nunito, system-ui, sans-serif',
+              fontSize: 16,
+              lineHeight: 1.6,
+              color: 'var(--storynest-ink)',
+            }}
+          >
+            {page.text || (
+              <em style={{ color: 'var(--storynest-ink-mute)' }}>No text yet</em>
+            )}
+          </p>
         )}
 
+        {canEdit && (
         <div className="flex flex-wrap items-center gap-2 pt-1">
           {editing ? (
             <>
@@ -451,6 +475,7 @@ export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, p
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   )

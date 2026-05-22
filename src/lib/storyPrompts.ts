@@ -98,7 +98,7 @@ export function buildImagePrompt(
   const charBlock = sheet
     ? `Characters (match these exactly across every page — same colors, clothing, age, features):\n${sheet}\n\n`
     : ''
-  return `${charBlock}Scene: ${rawImagePrompt}.\n\nStyle: ${styleSuffix}. Children's storybook illustration. No text, no letters, no captions in the image. Centered composition, warm and inviting.`
+  return `${charBlock}Scene: ${rawImagePrompt}.\n\nStyle: ${styleSuffix}. Children's storybook illustration. No text, no letters, no captions in the image.\n\nComposition (very important): place all characters, faces, and key action in the upper two-thirds of the frame. Reserve the lower third as visually quiet space — open sky, plain ground, water, soft pattern, or simple texture — so a caption can rest there without covering any character or important detail.`
 }
 
 export function buildCoverImagePrompt(

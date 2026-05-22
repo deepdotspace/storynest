@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="storynest">
+  <!-- Sticker tile: rounded square, ink hairline, coral fill matching
+       the brand's coral accent. Same recipe as the in-app sticker
+       frames so the favicon reads as "by the same hand". -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#F08A82" stroke="#212a50" stroke-width="2.5"/>
+  <!-- Star — the recurring decor motif. Cream fill, soft ink outline so
+       it stays crisp at 16x16 in the browser tab. -->
+  <path
+    d="M32 12 L37.8 24.4 L51.4 26.2 L41.5 35.7 L43.9 49.2 L32 42.8 L20.1 49.2 L22.5 35.7 L12.6 26.2 L26.2 24.4 Z"
+    fill="#FFFDF6"
+    stroke="#212a50"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+</svg>

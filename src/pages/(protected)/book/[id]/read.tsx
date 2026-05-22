@@ -6,9 +6,10 @@
  * book takes the entire viewport.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams, Link } from 'react-router-dom'
-import { useQuery } from 'deepspace'
+import { useQuery, useUser } from 'deepspace'
+import { useIsAdmin } from '../../../../lib/useIsAdmin'
 import {
   StoryReader,
   type ReaderBook,
@@ -33,6 +34,9 @@ interface PageRow {
 export default function ReadBookPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useUser()
+  const { isAdmin } = useIsAdmin()
+  const viewerId = user?.id ?? ''
 
   // `where: { recordId }` is silently ignored by useQuery (recordId is on
   // the envelope, not the data columns). Query without it and pick by id.
@@ -44,8 +48,27 @@ export default function ReadBookPage() {
   })
 
   const bookRecord = bookQuery.records?.find((r) => r.recordId === id)
-  const isLoading =
-    bookQuery.status === 'loading' || pagesQuery.status === 'loading'
+  // "Settled" = the SDK reports the subscription is no longer loading
+  // AND the records array is a real array (not undefined). On in-app
+  // navigation the new subscription can briefly report status='ready'
+  // before records hydrates — both signals must agree before we trust
+  // that "not in records" means "doesn't exist".
+  const bookSettled =
+    bookQuery.status !== 'loading' && Array.isArray(bookQuery.records)
+
+  // Grace window for the race between status='ready' and records
+  // populating. If 600ms pass with the query "settled" but no book
+  // found, we treat it as genuinely not found.
+  const [notFoundConfirmed, setNotFoundConfirmed] = useState(false)
+  useEffect(() => {
+    if (bookSettled && !bookRecord) {
+      const t = setTimeout(() => setNotFoundConfirmed(true), 600)
+      return () => clearTimeout(t)
+    }
+    // Reset whenever the book appears or we go back to loading.
+    setNotFoundConfirmed(false)
+    return undefined
+  }, [bookSettled, bookRecord])
 
   const readerPages = useMemo<ReaderPage[]>(() => {
     return (pagesQuery.records ?? [])
@@ -64,12 +87,17 @@ export default function ReadBookPage() {
     return <Navigate to="/library" replace />
   }
 
-  if (isLoading && !bookRecord) {
+  // Loading: query not settled yet, OR settled-but-bookRecord-undefined
+  // and we're still inside the grace window.
+  if (!bookSettled || (!bookRecord && !notFoundConfirmed)) {
     return <ReaderShell><LoadingState /></ReaderShell>
   }
 
+  // Genuinely not found after the grace window. Render UI instead of
+  // silently redirecting so the user sees what happened — and so a
+  // transient race doesn't throw them back to /library.
   if (!bookRecord) {
-    return <Navigate to="/library" replace />
+    return <ReaderShell><NotFoundState /></ReaderShell>
   }
 
   const book: ReaderBook = {
@@ -78,6 +106,12 @@ export default function ReadBookPage() {
     characters: bookRecord.data.characters,
     coverImageKey: bookRecord.data.coverImageKey ?? null,
   }
+
+  // Asset-routing decision: if the viewer is the owner OR the admin,
+  // SDK scope=self readFile works. Otherwise route via the cross-user
+  // public-book endpoint.
+  const ownerOfBook = (bookRecord as { createdBy?: string }).createdBy
+  const isOwnedByViewer = !!ownerOfBook && (ownerOfBook === viewerId || isAdmin)
 
   const notReady =
     bookRecord.data.status !== 'ready' || readerPages.length === 0
@@ -95,6 +129,10 @@ export default function ReadBookPage() {
       book={book}
       pages={readerPages}
       onExit={() => navigate('/library')}
+      // Cross-user reads (someone opening another's public book from
+      // /explore) can't fetch the owner's scope=self assets directly.
+      // Route them through the public-book endpoint instead.
+      publicBookId={isOwnedByViewer ? undefined : bookRecord.recordId}
     />
   )
 }
@@ -120,6 +158,31 @@ function LoadingState() {
     >
       Opening the book…
     </p>
+  )
+}
+
+function NotFoundState() {
+  return (
+    <div className="flex flex-col items-center gap-4 text-center max-w-md">
+      <p
+        className="font-serif italic"
+        style={{ fontSize: 23, color: 'var(--storynest-ink-soft)' }}
+      >
+        We couldn't find that story.
+      </p>
+      <Link
+        to="/library"
+        className="rounded-lg px-4 py-2 text-sm font-medium"
+        style={{
+          background: 'var(--storynest-sky)',
+          color: 'oklch(0.99 0.005 240)',
+          letterSpacing: '-0.01em',
+          boxShadow: '0 2px 8px rgba(33,42,80,0.12)',
+        }}
+      >
+        Back to library
+      </Link>
+    </div>
   )
 }
 

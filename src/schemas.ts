@@ -13,6 +13,7 @@ import { settingsSchema } from './schemas/admin-schema'
 import { storybookSchema } from './schemas/storybook-schema'
 import { pageSchema } from './schemas/page-schema'
 import { creditAccountSchema } from './schemas/credit-account-schema'
+import { helpMessageSchema } from './schemas/help-message-schema'
 
 export const schemas: CollectionSchema[] = [
   usersSchema,
@@ -20,4 +21,5 @@ export const schemas: CollectionSchema[] = [
   storybookSchema,
   pageSchema,
   creditAccountSchema,
+  helpMessageSchema,
 ]

@@ -7,11 +7,15 @@ main = "worker.ts"
 directory = "dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/ws/*", "/internal/*", "/v1/*"]
+run_worker_first = ["/api/*", "/ws/*", "/internal/*", "/v1/*", "/_deepspace/*"]
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["AppRecordRoom", "AppYjsRoom", "AppCanvasRoom", "AppPresenceRoom", "AppCronRoom"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["AppJobRoom"]
 
 [durable_objects]
 bindings = [
@@ -20,6 +24,7 @@ bindings = [
   { name = "CANVAS_ROOMS", class_name = "AppCanvasRoom" },
   { name = "PRESENCE_ROOMS", class_name = "AppPresenceRoom" },
   { name = "CRON_ROOMS", class_name = "AppCronRoom" },
+  { name = "JOB_ROOMS", class_name = "AppJobRoom" },
 ]
 
 # For per-app resources (D1, KV, Vectorize, R2, Queues), set the id field to

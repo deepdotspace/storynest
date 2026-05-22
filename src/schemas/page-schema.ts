@@ -19,6 +19,7 @@ export const pageSchema: CollectionSchema = {
     { name: 'imageKey', storage: 'text', interpretation: 'plain' },
     { name: 'audioKey', storage: 'text', interpretation: 'plain' },
     { name: 'status', storage: 'text', interpretation: 'plain' },
+    { name: 'failureReason', storage: 'text', interpretation: 'plain' },
     { name: 'visibility', storage: 'text', interpretation: 'plain' },
   ],
   permissions: {

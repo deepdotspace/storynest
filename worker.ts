@@ -29,13 +29,16 @@ import {
   CanvasRoom,
   PresenceRoom,
   CronRoom,
+  JobRoom,
 } from 'deepspace/worker'
-import type { ActionTools, ActionResult, DOManifest, DOBindings } from 'deepspace/worker'
+import type { Job, JobContext, DOManifest, DOBindings } from 'deepspace/worker'
 import { actions } from './src/actions/index.js'
 import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
+import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
 import { integrations } from './src/integrations.js'
 import { registerAiChatRoutes } from './src/ai/chat-routes.js'
+import { createActionTools } from './src/server/lib/actionTools.js'
 
 // =============================================================================
 // DO Manifest — declares all Durable Objects for dynamic deploy bindings
@@ -47,6 +50,7 @@ export const __DO_MANIFEST__ = [
   { binding: 'CANVAS_ROOMS', className: 'AppCanvasRoom', sqlite: true },
   { binding: 'PRESENCE_ROOMS', className: 'AppPresenceRoom', sqlite: true },
   { binding: 'CRON_ROOMS', className: 'AppCronRoom', sqlite: true },
+  { binding: 'JOB_ROOMS', className: 'AppJobRoom', sqlite: true },
 ] as const satisfies DOManifest
 
 // =============================================================================
@@ -78,6 +82,25 @@ export class AppCronRoom extends CronRoom<Env> {
 
   protected async onTask(taskName: string): Promise<void> {
     await runCronTask(taskName, this.env)
+  }
+}
+
+/**
+ * AppJobRoom — durable background-job queue for the storybook pipeline.
+ *
+ * Job code lives in src/jobs.ts; the DO alarm picks up queued jobs and
+ * calls onJob(job, ctx). Crashes mid-run are recovered automatically.
+ * Clients enqueue from server actions with `enqueueJob`; the existing
+ * useQuery on book + page records carries live progress (the job
+ * updates rows as it goes).
+ */
+export class AppJobRoom extends JobRoom<Env> {
+  constructor(state: DurableObjectState, env: Env) {
+    super(state, env)
+  }
+
+  protected async onJob(job: Job, ctx: JobContext): Promise<unknown> {
+    return await runJob(job, ctx, this.env)
   }
 }
 
@@ -189,6 +212,27 @@ app.get('/api/auth/oauth-complete', async (c) => {
     headers: {
       Location: appOrigin,
       'Set-Cookie': `__Secure-better-auth.session_token=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`,
+    },
+  })
+})
+
+app.all('/api/auth/sign-out', async (c) => {
+  try {
+    await authWorkerFetch(c.env, '/api/auth/sign-out', {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+      body: c.req.method !== 'GET' && c.req.method !== 'HEAD' ? c.req.raw.body : undefined,
+    })
+  } catch {
+    // Still expire the app-scoped cookie below. A network/auth-worker
+    // failure must not leave the browser immediately signed back in.
+  }
+
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Set-Cookie': '__Secure-better-auth.session_token=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0',
     },
   })
 })
@@ -391,6 +435,264 @@ app.get('/ws/presence/:scopeId', wsRoute(
 
 app.get('/ws/cron/:roomId', wsRoute((env) => env.CRON_ROOMS))
 
+app.get('/ws/jobs/:roomId', wsRoute((env) => env.JOB_ROOMS))
+
+// ---------------------------------------------------------------------------
+// Public endpoints — unauthenticated, for landing-page demo of the featured
+// story. The featured-story id is stored in the `settings` collection under
+// key='featured_story_id'. These endpoints read it via the owner's identity
+// so anonymous visitors can browse the demo without signing in.
+// ---------------------------------------------------------------------------
+
+interface PublicStorybookRow {
+  title?: string
+  characters?: string
+  ageBand?: string
+  artStyle?: string
+  visibility?: string
+  status?: string
+  coverImageKey?: string
+}
+
+interface PublicPageRow {
+  bookId?: string
+  pageNumber?: number
+  text?: string
+  imageKey?: string
+  audioKey?: string
+}
+
+async function ownerExecTool<T>(
+  env: Env,
+  tool: string,
+  params: Record<string, unknown>,
+): Promise<{ success: true; data: T } | { success: false; error: string }> {
+  if (!env.OWNER_USER_ID) {
+    return { success: false, error: 'OWNER_USER_ID not configured' }
+  }
+  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.APP_NAME}`))
+  const res = await stub.fetch(new Request('https://internal/api/tools/execute', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-User-Id': env.OWNER_USER_ID,
+      'X-App-Action': 'true',
+    },
+    body: JSON.stringify({ tool, params }),
+  }))
+  return res.json() as Promise<{ success: true; data: T } | { success: false; error: string }>
+}
+
+async function readFeaturedBookSet(env: Env): Promise<{
+  book: PublicStorybookRow & { recordId: string }
+  pages: Array<PublicPageRow & { recordId: string }>
+  allowedKeys: Set<string>
+} | null> {
+  // 1) read settings → featured_story_id
+  const settingsQ = await ownerExecTool<{
+    records: Array<{ recordId: string; data: { key: string; value: string } }>
+  }>(env, 'records.query', { collection: 'settings', where: { key: 'featured_story_id' } })
+  if (!settingsQ.success) return null
+  const setting = settingsQ.data.records[0]
+  if (!setting) return null
+  const bookId = setting.data.value
+  if (!bookId) return null
+
+  // 2) read book
+  const bookRes = await ownerExecTool<{ record: { recordId: string; data: PublicStorybookRow } }>(
+    env,
+    'records.get',
+    { collection: 'storybooks', recordId: bookId },
+  )
+  if (!bookRes.success) return null
+  const book = bookRes.data.record
+  // Must still be public + ready
+  if (book.data.visibility !== 'public' || book.data.status !== 'ready') return null
+
+  // 3) read pages
+  const pagesQ = await ownerExecTool<{
+    records: Array<{ recordId: string; data: PublicPageRow }>
+  }>(env, 'records.query', { collection: 'pages', where: { bookId } })
+  if (!pagesQ.success) return null
+
+  const pages = pagesQ.data.records
+    .map((r) => ({ recordId: r.recordId, ...r.data }))
+    .filter((p) => (p.pageNumber ?? 0) > 0)
+    .sort((a, b) => (a.pageNumber ?? 0) - (b.pageNumber ?? 0))
+
+  const allowedKeys = new Set<string>()
+  if (book.data.coverImageKey) allowedKeys.add(book.data.coverImageKey)
+  for (const p of pages) {
+    if (p.imageKey) allowedKeys.add(p.imageKey)
+    if (p.audioKey) allowedKeys.add(p.audioKey)
+  }
+
+  return {
+    book: { recordId: book.recordId, ...book.data },
+    pages,
+    allowedKeys,
+  }
+}
+
+app.get('/api/public/app-config', (c) => {
+  return c.json({
+    success: true,
+    data: {
+      ownerUserId: c.env.OWNER_USER_ID ?? null,
+      appName: c.env.APP_NAME,
+    },
+  })
+})
+
+app.get('/api/public/featured-story', async (c) => {
+  try {
+    const featured = await readFeaturedBookSet(c.env)
+    if (!featured) {
+      return c.json({ success: true, data: null })
+    }
+    return c.json({
+      success: true,
+      data: {
+        book: {
+          recordId: featured.book.recordId,
+          title: featured.book.title ?? 'Untitled',
+          characters: featured.book.characters ?? '',
+          ageBand: featured.book.ageBand ?? '',
+          artStyle: featured.book.artStyle ?? '',
+          coverImageKey: featured.book.coverImageKey ?? null,
+        },
+        pages: featured.pages.map((p) => ({
+          recordId: p.recordId,
+          pageNumber: p.pageNumber ?? 0,
+          text: p.text ?? '',
+          imageKey: p.imageKey ?? null,
+          audioKey: p.audioKey ?? null,
+        })),
+      },
+    })
+  } catch (err) {
+    return c.json(
+      { success: false, error: err instanceof Error ? err.message : String(err) },
+      500,
+    )
+  }
+})
+
+/**
+ * GET /api/book-files/:key?bookId=<id>
+ *
+ * Authenticated cross-user read for ANY public storybook's assets.
+ * Browser's useR2Files.readFile always uses scope=self, which can't
+ * read another user's files. This endpoint:
+ *   - requires a signed-in user (so we don't accidentally expose
+ *     to anonymous traffic — that's what /api/public/files is for)
+ *   - validates the book exists AND its visibility is 'public'
+ *   - validates the requested key is one of the book's known assets
+ *     (cover/page-images/page-audios) so callers can't probe siblings
+ *   - forwards to the platform-worker with the OWNER's user-id so the
+ *     prefix check passes
+ *
+ * Cache-Control is `private` (per-user) since we already gated on auth.
+ */
+app.get('/api/book-files/:key{.+}', async (c) => {
+  try {
+    const auth = await resolveAuth(c.req.raw, c.env)
+    if (!auth) return c.json({ error: 'unauthorized' }, 401)
+    const bookId = c.req.query('bookId')
+    if (!bookId) return c.json({ error: 'bookId required' }, 400)
+    const key = c.req.param('key')
+    if (!key) return c.notFound()
+
+    const allowed = await readPublicBookAssetSet(c.env, bookId)
+    if (!allowed) return c.json({ error: 'book not public or not found' }, 404)
+    if (!allowed.keys.has(key)) return c.json({ error: 'key not part of book' }, 403)
+
+    const platformUrl = new URL('https://internal/internal/files/' + key)
+    const headers = new Headers()
+    headers.set('x-app-identity-token', c.env.APP_IDENTITY_TOKEN)
+    headers.set('x-app-name', c.env.APP_NAME)
+    headers.set('x-user-id', allowed.ownerUserId)
+    const resp = await platformWorkerFetch(
+      c.env,
+      new Request(platformUrl.toString(), { method: 'GET', headers }),
+    )
+    const respHeaders = new Headers(resp.headers)
+    respHeaders.set('Cache-Control', 'private, max-age=300')
+    return new Response(resp.body, { status: resp.status, headers: respHeaders })
+  } catch (err) {
+    return c.json(
+      { success: false, error: err instanceof Error ? err.message : String(err) },
+      500,
+    )
+  }
+})
+
+async function readPublicBookAssetSet(
+  env: Env,
+  bookId: string,
+): Promise<{ ownerUserId: string; keys: Set<string> } | null> {
+  const bookRes = await ownerExecTool<{
+    record: { recordId: string; createdBy?: string; data: PublicStorybookRow }
+  }>(env, 'records.get', { collection: 'storybooks', recordId: bookId })
+  if (!bookRes.success) return null
+  const env2 = bookRes.data.record
+  if (env2.data.visibility !== 'public') return null
+  const ownerUserId = env2.createdBy ?? ''
+  if (!ownerUserId) return null
+
+  const pagesQ = await ownerExecTool<{
+    records: Array<{ recordId: string; data: PublicPageRow }>
+  }>(env, 'records.query', { collection: 'pages', where: { bookId } })
+
+  const keys = new Set<string>()
+  if (env2.data.coverImageKey) keys.add(env2.data.coverImageKey)
+  if (pagesQ.success) {
+    for (const r of pagesQ.data.records) {
+      if (r.data.imageKey) keys.add(r.data.imageKey)
+      if (r.data.audioKey) keys.add(r.data.audioKey)
+    }
+  }
+  return { ownerUserId, keys }
+}
+
+app.get('/api/public/files/:key{.+}', async (c) => {
+  try {
+    const key = c.req.param('key')
+    if (!key) return c.notFound()
+    const featured = await readFeaturedBookSet(c.env)
+    if (!featured || !featured.allowedKeys.has(key)) {
+      return c.notFound()
+    }
+    // Forward to platform-worker as the owner so the owner-scoped file is
+    // readable. We can't accept the browser's anonymous session here, so we
+    // inject the owner's identity headers explicitly.
+    const platformUrl = new URL(
+      'https://internal/internal/files/' + encodeURIComponent(key),
+    )
+    const headers = new Headers()
+    headers.set('x-app-identity-token', c.env.APP_IDENTITY_TOKEN)
+    headers.set('x-app-name', c.env.APP_NAME)
+    headers.set('x-user-id', c.env.OWNER_USER_ID)
+
+    const resp = await platformWorkerFetch(
+      c.env,
+      new Request(platformUrl.toString(), {
+        method: 'GET',
+        headers,
+      }),
+    )
+    const respHeaders = new Headers(resp.headers)
+    // Allow caching on the edge for the demo asset — keys are content-addressed.
+    respHeaders.set('Cache-Control', 'public, max-age=300')
+    return new Response(resp.body, { status: resp.status, headers: respHeaders })
+  } catch (err) {
+    return c.json(
+      { success: false, error: err instanceof Error ? err.message : String(err) },
+      500,
+    )
+  }
+})
+
 // ---------------------------------------------------------------------------
 // Server actions
 // ---------------------------------------------------------------------------
@@ -461,6 +763,83 @@ app.all('/api/files/*', async (c) => {
 })
 
 // ---------------------------------------------------------------------------
+// /_deepspace/* — same-origin proxy to api-worker for authenticated SDK
+// hooks. Attaches APP_IDENTITY_TOKEN + APP_NAME so the browser never sees
+// the platform secret. Every request requires a signed user JWT.
+//
+// SECURITY: exact (method, path) allowlist — not a prefix match. A prefix
+// match leaks deploy/CLI surfaces like POST /api/subscriptions/sync into the
+// browser context, where an XSS or compromised user session can become a
+// confused deputy. Adding a new browser hook in the SDK requires explicitly
+// extending the BROWSER_PROXY_ROUTES tuple below.
+// ---------------------------------------------------------------------------
+
+interface ProxyRoute {
+  method: string
+  path: string
+  /** Skip the user-JWT gate. Default false. Pricing tables are public. */
+  publicRead?: boolean
+  /** Inject `?appName=...` (from env) into the forwarded URL. Default false. */
+  injectAppName?: boolean
+}
+
+const BROWSER_PROXY_ROUTES: ReadonlyArray<ProxyRoute> = [
+  // useSubscription — read state, subscribe, manage billing.
+  { method: 'GET',  path: '/_deepspace/subscriptions/me' },
+  { method: 'POST', path: '/_deepspace/subscriptions/checkout' },
+  { method: 'POST', path: '/_deepspace/subscriptions/portal' },
+  // useCheckout (one-time charges)
+  { method: 'POST', path: '/_deepspace/charges/create' },
+  { method: 'GET',  path: '/_deepspace/charges/me' },
+]
+
+app.all('/_deepspace/*', async (c) => {
+  const url = new URL(c.req.url)
+  const method = c.req.method
+  const route = BROWSER_PROXY_ROUTES.find(
+    (r) => r.method === method && r.path === url.pathname,
+  )
+  if (!route) {
+    return c.json({ error: 'not_found' }, 404)
+  }
+
+  // Public-read routes (pricing tables) skip the JWT gate. Everything else
+  // requires a signed-in user.
+  let auth: Awaited<ReturnType<typeof resolveAuth>> | null = null
+  if (!route.publicRead) {
+    auth = await resolveAuth(c.req.raw, c.env)
+    if (!auth?.userId) return c.json({ error: 'unauthorized' }, 401)
+  }
+
+  // Inject appName into the query string when the route needs it. We can't
+  // rely on the HMAC header for routes the platform serves without HMAC
+  // (e.g. /plans is public). Use URLSearchParams.set so we OVERWRITE any
+  // caller-supplied appName — otherwise a request to
+  // `/_deepspace/subscriptions/plans?appName=other_app` would forward a
+  // duplicate-key query string and the platform would pick whichever value
+  // its parser sees first.
+  const forwardedParams = new URLSearchParams(url.search)
+  if (route.injectAppName) {
+    forwardedParams.set('appName', c.env.APP_NAME)
+  }
+  const queryString = forwardedParams.toString()
+  const apiPath =
+    url.pathname.replace('/_deepspace/', '/api/') + (queryString ? `?${queryString}` : '')
+
+  const headers = new Headers(c.req.raw.headers)
+  headers.delete('x-user-id')
+  headers.set('x-app-identity-token', c.env.APP_IDENTITY_TOKEN)
+  headers.set('x-app-name', c.env.APP_NAME)
+  if (auth?.userId) headers.set('x-user-id', auth.userId)
+
+  return apiWorkerFetch(c.env, apiPath, {
+    method,
+    headers,
+    body: ['GET', 'HEAD'].includes(method) ? undefined : c.req.raw.body,
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Static assets (SPA fallback)
 // ---------------------------------------------------------------------------
 
@@ -473,66 +852,5 @@ app.get('*', async (c) => {
   }
   return response
 })
-
-// =============================================================================
-// Action Tools — route to app's own RecordRoom DO
-// =============================================================================
-
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
-  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.APP_NAME}`))
-
-  // Internal helper — DO returns `ActionResult<unknown>`. Callers below
-  // cast to the precisely-typed result for each operation. The cast is
-  // safe because the wire shape is set by the SDK's tools-api handler.
-  async function execTool<TData>(
-    tool: string,
-    params: Record<string, unknown>,
-  ): Promise<ActionResult<TData>> {
-    const res = await stub.fetch(new Request('https://internal/api/tools/execute', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': userId,
-        'X-App-Action': 'true',
-      },
-      body: JSON.stringify({ tool, params }),
-    }))
-    return res.json() as Promise<ActionResult<TData>>
-  }
-
-  async function callIntegration<T = unknown>(
-    endpoint: string,
-    data?: unknown,
-  ): Promise<ActionResult<T>> {
-    const integrationName = endpoint.split('/')[0]
-    const billingMode = integrations[integrationName]?.billing ?? 'developer'
-
-    // Use the owner JWT for developer-billed calls, the caller's JWT otherwise.
-    // The api-worker bills the JWT subject — no client-supplied override.
-    const jwt = billingMode === 'developer' ? env.APP_OWNER_JWT : callerJwt
-
-    const res = await apiWorkerFetch(env, `/api/integrations/${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwt}`,
-      },
-      body: JSON.stringify(data ?? {}),
-    })
-    return res.json() as Promise<ActionResult<T>>
-  }
-
-  return {
-    create: (collection, data) => execTool('records.create', { collection, data }),
-    update: (collection, recordId, data) =>
-      execTool('records.update', { collection, recordId, data }),
-    remove: (collection, recordId) => execTool('records.delete', { collection, recordId }),
-    get: (collection, recordId) => execTool('records.get', { collection, recordId }),
-    query: (collection, options) => execTool('records.query', { collection, ...options }),
-    integration: callIntegration,
-    registerUser: (opts) =>
-      execTool('users.register', { userId: opts.userId ?? userId, ...opts }),
-  }
-}
 
 export default app

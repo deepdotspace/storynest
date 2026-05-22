@@ -32,6 +32,7 @@ import {
   Type,
   EyeOff,
   X as XIcon,
+  Captions as CaptionsIcon,
 } from 'lucide-react'
 import { useAssetBlobUrl } from '../../lib/assetUrl'
 import { PageImage } from './PageImage'
@@ -39,6 +40,12 @@ import { TextBubble } from './TextBubble'
 import { AudioPlayer, type AudioPlayerHandle } from './AudioPlayer'
 import { Sparkle, Star, Cloud } from '../decor'
 import { cn } from '../ui/utils'
+import { useReaderSettings } from '../../lib/useReaderSettings'
+import {
+  CaptionStrip,
+  captionStripLeftOffset,
+  CAPTION_STRIP_TRANSITION,
+} from './CaptionStrip'
 
 /* ── Minimal row shapes we depend on (avoid coupling to W1's exports). ─── */
 
@@ -61,9 +68,13 @@ interface StoryReaderProps {
   book: ReaderBook
   pages: ReaderPage[]
   onExit: () => void
+  /** Set when the reader is opened on a book the viewer doesn't own
+   * (e.g. opened from /explore). Routes asset reads through the
+   * cross-user public-book endpoint instead of scope=self. */
+  publicBookId?: string
 }
 
-export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
+export function StoryReader({ book, pages, onExit, publicBookId }: StoryReaderProps) {
   const sortedPages = useMemo(
     () => [...pages].sort((a, b) => a.pageNumber - b.pageNumber),
     [pages],
@@ -77,6 +88,12 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
   const [muted, setMuted] = useState(false)
   const [textVisible, setTextVisible] = useState(true)
   const audioRef = useRef<AudioPlayerHandle>(null)
+  const {
+    captionsEnabled,
+    captionsCollapsed,
+    toggleCaptions,
+    toggleCollapsed,
+  } = useReaderSettings()
 
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => Math.max(0, i - 1))
@@ -101,11 +118,15 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
         setMuted((m) => !m)
       } else if (e.key === 't' || e.key === 'T') {
         setTextVisible((v) => !v)
+      } else if (e.key === 'c' || e.key === 'C') {
+        toggleCaptions()
+      } else if (e.key === '[') {
+        if (captionsEnabled) toggleCollapsed()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [goPrev, goNext, onExit])
+  }, [goPrev, goNext, onExit, toggleCaptions, toggleCollapsed, captionsEnabled])
 
   // Lock body scroll while the reader is open.
   useEffect(() => {
@@ -119,9 +140,11 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
   /* ── Resolve current page's audio key (skip on cover / end). ─────────── */
   const onBodyPage = currentIndex >= 1 && currentIndex <= N
   const currentBodyPage = onBodyPage ? sortedPages[currentIndex - 1] : null
-  // Owner-scoped audio — needs blob URL (see assetUrl.ts).
+  // Owner-scoped audio — needs blob URL (see assetUrl.ts). When viewing
+  // another user's public book, route via the cross-user endpoint.
   const { url: currentAudioSrc } = useAssetBlobUrl(
     onBodyPage ? currentBodyPage?.audioKey ?? null : null,
+    { publicBookId },
   )
 
   const onImageClick = useCallback(() => {
@@ -145,13 +168,16 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
         pageKey={currentIndex}
       />
 
-      {/* Top-left: exit — sticker pill */}
+      {/* Top-left: exit — sticker pill. `left` is driven inline so it
+          slides out of the way when the caption strip is mounted. */}
       <button
         type="button"
         data-testid="reader-exit"
         onClick={onExit}
-        className="absolute left-5 top-5 z-20 inline-flex items-center gap-1.5 rounded-full px-4 py-2 transition-all duration-150 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+        className="absolute top-5 z-20 inline-flex items-center gap-1.5 rounded-full px-4 py-2 transition-all duration-150 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
         style={{
+          left: captionStripLeftOffset(captionsEnabled, captionsCollapsed),
+          transition: `${CAPTION_STRIP_TRANSITION}, transform 150ms, box-shadow 150ms`,
           background: 'var(--storynest-card)',
           color: 'var(--storynest-ink)',
           border: '1.5px solid var(--storynest-rule)',
@@ -168,21 +194,35 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
         <span>Library</span>
       </button>
 
-      {/* Top-right: text toggle + mute */}
+      {/* Top-right: captions toggle + text toggle + mute */}
       {currentIndex !== 0 && currentIndex !== lastIndex && (
         <div className="absolute right-5 top-5 z-20 flex items-center gap-2.5">
           <ChromeIconButton
-            testId="reader-text-toggle"
-            label={textVisible ? 'Hide narration text' : 'Show narration text'}
-            pressed={!textVisible}
-            onClick={() => setTextVisible((v) => !v)}
+            testId="reader-captions-toggle"
+            label={captionsEnabled ? 'Hide caption strip' : 'Show caption strip on the left'}
+            pressed={captionsEnabled}
+            onClick={toggleCaptions}
           >
-            {textVisible ? (
-              <Type className="h-4 w-4" aria-hidden />
-            ) : (
-              <EyeOff className="h-4 w-4" aria-hidden />
-            )}
+            <CaptionsIcon className="h-4 w-4" aria-hidden />
           </ChromeIconButton>
+
+          {/* The floating-bubble toggle is only meaningful when captions
+              are off — otherwise the bubble is hidden anyway. Hide the
+              button in that case so the chrome stays uncluttered. */}
+          {!captionsEnabled && (
+            <ChromeIconButton
+              testId="reader-text-toggle"
+              label={textVisible ? 'Hide narration text' : 'Show narration text'}
+              pressed={!textVisible}
+              onClick={() => setTextVisible((v) => !v)}
+            >
+              {textVisible ? (
+                <Type className="h-4 w-4" aria-hidden />
+              ) : (
+                <EyeOff className="h-4 w-4" aria-hidden />
+              )}
+            </ChromeIconButton>
+          )}
 
           <ChromeIconButton
             testId="reader-mute"
@@ -199,11 +239,26 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
         </div>
       )}
 
+      {/* Left-side caption strip — alternative to the floating bubble.
+          Always mounted while captions are on; its own button toggles the
+          width transition for the audio-only collapsed state. */}
+      {captionsEnabled && currentIndex !== 0 && currentIndex !== lastIndex && currentBodyPage && (
+        <CaptionStrip
+          text={currentBodyPage.text}
+          pageIndex={currentIndex}
+          pageTotal={N}
+          collapsed={captionsCollapsed}
+          onToggleCollapsed={toggleCollapsed}
+          bookTitle={book.title}
+        />
+      )}
+
       {/* ── Page content ───────────────────────────────────────────────── */}
       {currentIndex === 0 ? (
         <CoverView
           book={book}
           onStart={goNext}
+          publicBookId={publicBookId}
         />
       ) : currentIndex === lastIndex ? (
         <EndView
@@ -215,8 +270,9 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
           page={currentBodyPage!}
           index={currentIndex}
           total={N}
-          textVisible={textVisible}
+          textVisible={textVisible && !captionsEnabled}
           onImageClick={onImageClick}
+          publicBookId={publicBookId}
         />
       )}
 
@@ -229,6 +285,7 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
             direction="left"
             disabled={currentIndex <= 0}
             onClick={goPrev}
+            leftOffsetPx={captionStripLeftOffset(captionsEnabled, captionsCollapsed)}
           />
           <ArrowButton
             testId="reader-next"
@@ -265,9 +322,11 @@ export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
 function CoverView({
   book,
   onStart,
+  publicBookId,
 }: {
   book: ReaderBook
   onStart: () => void
+  publicBookId?: string
 }) {
   // Pull a single name out of the characters field for the Caveat byline,
   // falling back to "a story" if not present.
@@ -337,6 +396,7 @@ function CoverView({
               imageKey={book.coverImageKey}
               alt={`Cover illustration for ${book.title}`}
               contain
+              publicBookId={publicBookId}
             />
           </div>
         ) : null}
@@ -383,12 +443,14 @@ function BodyView({
   total,
   textVisible,
   onImageClick,
+  publicBookId,
 }: {
   page: ReaderPage
   index: number
   total: number
   textVisible: boolean
   onImageClick: () => void
+  publicBookId?: string
 }) {
   return (
     <div
@@ -405,6 +467,7 @@ function BodyView({
         <PageImage
           imageKey={page.imageKey}
           alt={`Illustration for page ${index} of ${total}`}
+          publicBookId={publicBookId}
         />
         {/* Soft gradient under the text bubble for legibility */}
         <div
@@ -417,7 +480,11 @@ function BodyView({
       </button>
 
       {/* Text bubble floating over the lower edge */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-24 sm:bottom-28 z-10 px-6 flex justify-center">
+      {/* Wide horizontal strip pinned near the bottom edge — leaves
+          room for the prev/next arrows + page counter (bottom-6/7).
+          Arrows are at the screen edges so they don't collide
+          horizontally even though we're vertically close. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-14 sm:bottom-16 z-10 px-6 flex justify-center">
         <TextBubble text={page.text} visible={textVisible} />
       </div>
     </div>
@@ -491,14 +558,24 @@ function ArrowButton({
   direction,
   disabled,
   onClick,
+  leftOffsetPx,
 }: {
   testId: string
   label: string
   direction: 'left' | 'right'
   disabled: boolean
   onClick: () => void
+  /** Override left position (px) — used so the prev arrow slides clear
+   * of the caption strip when it's mounted. Ignored for direction='right'. */
+  leftOffsetPx?: number
 }) {
   const Icon = direction === 'left' ? ArrowLeft : ArrowRight
+  // For left arrows, inline `left` overrides the Tailwind class. For
+  // right arrows, fall through to Tailwind `right-5`.
+  const positionStyle =
+    direction === 'left' && typeof leftOffsetPx === 'number'
+      ? { left: leftOffsetPx, transition: `${CAPTION_STRIP_TRANSITION}, transform 150ms` }
+      : undefined
   return (
     <button
       type="button"
@@ -508,11 +585,13 @@ function ArrowButton({
       onClick={onClick}
       className={cn(
         'group absolute bottom-6 z-20 flex h-12 w-12 items-center justify-center rounded-full transition-all duration-150',
-        direction === 'left' ? 'left-5' : 'right-5',
+        direction === 'left' && typeof leftOffsetPx !== 'number' && 'left-5',
+        direction === 'right' && 'right-5',
         'disabled:opacity-30 disabled:cursor-not-allowed hover:-translate-y-0.5',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
       )}
       style={{
+        ...positionStyle,
         background: 'var(--storynest-card)',
         color: 'var(--storynest-ink)',
         border: '1.5px solid var(--storynest-ink)',

@@ -8,7 +8,8 @@
 
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useMutations, useQuery, useR2Files } from 'deepspace'
+import { useMutations, useQuery, useR2Files, useUser } from 'deepspace'
+import { useIsAdmin } from '../../../../lib/useIsAdmin'
 import {
   Button,
   Input,
@@ -53,6 +54,14 @@ export default function EditBook() {
   const bookEnvelope = bookRecords.find((r) => r.recordId === id)
   const book = bookEnvelope?.data
   const bookId = bookEnvelope?.recordId ?? id ?? ''
+
+  // Edit permission: book author OR app admin. Others (e.g. anyone
+  // browsing /explore) get a read-only view — no reroll, no visibility
+  // toggle, no delete, no inline title/text edit.
+  const { user } = useUser()
+  const { isAdmin } = useIsAdmin()
+  const isAuthor = !!bookEnvelope && (bookEnvelope as { createdBy?: string }).createdBy === user?.id
+  const canEdit = isAuthor || isAdmin
 
   const sortedPages = useMemo(
     () => [...pageRecords].sort((a, b) => a.data.pageNumber - b.data.pageNumber),
@@ -106,6 +115,7 @@ export default function EditBook() {
       <GenerationProgress
         book={book}
         pages={sortedPages.map((r) => r.data)}
+        bookId={bookId}
       />
     )
   }
@@ -207,31 +217,37 @@ export default function EditBook() {
               imageKey={book.coverImageKey}
               alt={`Cover for ${book.title}`}
               contain
+              // Cross-user viewers (e.g. opening a public book from
+              // /explore) can't read the owner's scope=self file —
+              // route through the cross-user endpoint instead.
+              publicBookId={!canEdit ? bookId : undefined}
             />
-            <button
-              type="button"
-              onClick={onRerollCover}
-              disabled={coverBusy}
-              data-testid="reroll-cover"
-              className="absolute bottom-2 left-2 right-2 inline-flex items-center justify-center rounded-full transition-opacity disabled:opacity-60"
-              style={{
-                padding: '8px 12px',
-                background: 'oklch(0.22 0.04 265 / 0.82)',
-                color: 'oklch(0.99 0.005 240)',
-                fontFamily: 'Nunito, system-ui, sans-serif',
-                fontSize: 12,
-                fontWeight: 600,
-                border: '1.5px solid oklch(0.99 0.005 240 / 0.2)',
-              }}
-            >
-              {coverBusy ? 'Re-rolling…' : 'Re-roll cover'}
-            </button>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={onRerollCover}
+                disabled={coverBusy}
+                data-testid="reroll-cover"
+                className="absolute bottom-2 left-2 right-2 inline-flex items-center justify-center rounded-full transition-opacity disabled:opacity-60"
+                style={{
+                  padding: '8px 12px',
+                  background: 'oklch(0.22 0.04 265 / 0.82)',
+                  color: 'oklch(0.99 0.005 240)',
+                  fontFamily: 'Nunito, system-ui, sans-serif',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  border: '1.5px solid oklch(0.99 0.005 240 / 0.2)',
+                }}
+              >
+                {coverBusy ? 'Re-rolling…' : 'Re-roll cover'}
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col gap-4">
           <div className="min-w-0">
-            {editingTitle ? (
+            {editingTitle && canEdit ? (
               <div className="flex flex-wrap gap-2">
                 <Input
                   value={titleDraft}
@@ -252,7 +268,7 @@ export default function EditBook() {
                 <Button size="sm" onClick={saveTitle}>Save</Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditingTitle(false)}>Cancel</Button>
               </div>
-            ) : (
+            ) : canEdit ? (
               <button
                 type="button"
                 onClick={() => { setTitleDraft(book.title); setEditingTitle(true) }}
@@ -270,6 +286,18 @@ export default function EditBook() {
                   {book.title}
                 </h1>
               </button>
+            ) : (
+              <h1
+                data-testid="book-title"
+                className="font-display leading-tight md:text-[40px]"
+                style={{
+                  color: 'var(--storynest-ink)',
+                  fontSize: 32,
+                  fontWeight: 600,
+                }}
+              >
+                {book.title}
+              </h1>
             )}
             <p
               className="font-hand mt-2"
@@ -300,6 +328,7 @@ export default function EditBook() {
               Read story
             </Link>
 
+            {canEdit && (
             <div
               role="radiogroup"
               aria-label="Visibility"
@@ -356,7 +385,9 @@ export default function EditBook() {
                 <Lock className="h-3.5 w-3.5" aria-hidden /> Private
               </button>
             </div>
+            )}
 
+            {canEdit && (
             <button
               type="button"
               onClick={() => setConfirmDelete(true)}
@@ -374,6 +405,7 @@ export default function EditBook() {
             >
               Delete
             </button>
+            )}
           </div>
         </div>
       </header>
@@ -388,6 +420,7 @@ export default function EditBook() {
             artStyle={book.artStyle}
             characterSheet={book.characterSheet}
             pagesPut={pagesMut.put}
+            canEdit={canEdit}
           />
         ))}
       </div>

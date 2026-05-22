@@ -70,7 +70,7 @@ export type PageStatus = (typeof PAGE_STATUSES)[number]
 
 /* ── Model + voice config ──────────────────────────────────────────── */
 
-export const OUTLINE_MODEL = 'claude-haiku-4-5-20251001'
+export const OUTLINE_MODEL = 'claude-haiku-4-5'
 export const OUTLINE_MAX_TOKENS = 4000
 
 export const IMAGE_MODEL = 'gemini-2.5-flash-image'

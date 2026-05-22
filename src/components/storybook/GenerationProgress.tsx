@@ -5,14 +5,18 @@
  * sleeping Hootie + Start-over CTA.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Hootie } from '../mascots/Hootie'
 import { Sparkle } from '../decor'
 import type { Storybook, Page } from '../../lib/pipeline'
+import { callAction } from '../../lib/callAction'
+import { useToast } from '../ui'
 
 interface Props {
   book: Storybook
   pages: Page[]
+  bookId?: string
 }
 
 function heading(status: Storybook['status']): string {
@@ -84,11 +88,34 @@ function activeIndex(sorted: Page[]): number {
   return sorted.findIndex((p) => p.status !== 'ready' && p.status !== 'failed')
 }
 
-export function GenerationProgress({ book, pages }: Props) {
+export function GenerationProgress({ book, pages, bookId }: Props) {
   const progress = Math.max(0, Math.min(100, book.progress || 0))
   const sorted = [...pages].sort((a, b) => a.pageNumber - b.pageNumber)
   const hootie = hootieFor(book.status)
   const inFlight = activeIndex(sorted)
+  const toast = useToast()
+  const [retrying, setRetrying] = useState(false)
+  const failedPages = sorted.filter((p) => p.status === 'failed').length
+  const canRetry = !!bookId && book.status === 'failed' && failedPages > 0
+
+  async function onRetry() {
+    if (!bookId || retrying) return
+    setRetrying(true)
+    const result = await callAction<{ bookId: string; retrySteps?: number; nothingToRetry?: boolean }>(
+      'enqueueRetryFailedPages',
+      { bookId },
+    )
+    setRetrying(false)
+    if (!result.success) {
+      toast.error('Could not retry', result.error)
+      return
+    }
+    if (result.data.nothingToRetry) {
+      toast.info('Nothing to retry', 'All pages are already complete.')
+      return
+    }
+    toast.success('Retrying', `Re-running ${result.data.retrySteps ?? 0} step(s).`)
+  }
 
   return (
     <div
@@ -200,21 +227,46 @@ export function GenerationProgress({ book, pages }: Props) {
           >
             {book.failureReason || 'The pipeline stopped before finishing.'}
           </div>
-          <Link
-            to="/create"
-            className="mt-4 inline-flex items-center rounded-full transition-transform active:translate-x-[3px] active:translate-y-[3px]"
-            style={{
-              padding: '10px 22px',
-              background: 'var(--storynest-coral)',
-              color: 'oklch(0.99 0.005 240)',
-              fontFamily: 'Fredoka, system-ui, sans-serif',
-              fontSize: 15,
-              fontWeight: 600,
-              boxShadow: '3px 3px 0 0 var(--storynest-coral-deep)',
-            }}
-          >
-            Start over
-          </Link>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            {canRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={retrying}
+                data-testid="retry-failed-pages"
+                className="inline-flex items-center rounded-full transition-transform active:translate-x-[3px] active:translate-y-[3px]"
+                style={{
+                  padding: '10px 22px',
+                  background: 'var(--storynest-sky)',
+                  color: 'oklch(0.99 0.005 240)',
+                  fontFamily: 'Fredoka, system-ui, sans-serif',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  boxShadow: '3px 3px 0 0 var(--storynest-sky-deep)',
+                  opacity: retrying ? 0.7 : 1,
+                  cursor: retrying ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {retrying ? 'Queuing…' : `Retry failed page${failedPages === 1 ? '' : 's'}`}
+              </button>
+            )}
+            <Link
+              to="/create"
+              className="inline-flex items-center rounded-full transition-transform active:translate-x-[3px] active:translate-y-[3px]"
+              style={{
+                padding: '10px 22px',
+                background: canRetry ? 'transparent' : 'var(--storynest-coral)',
+                color: canRetry ? 'var(--storynest-coral-deep)' : 'oklch(0.99 0.005 240)',
+                fontFamily: 'Fredoka, system-ui, sans-serif',
+                fontSize: 15,
+                fontWeight: 600,
+                border: canRetry ? '1.5px solid var(--storynest-coral)' : 'none',
+                boxShadow: canRetry ? 'none' : '3px 3px 0 0 var(--storynest-coral-deep)',
+              }}
+            >
+              Start over
+            </Link>
+          </div>
         </div>
       )}
 

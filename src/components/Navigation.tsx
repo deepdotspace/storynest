@@ -14,22 +14,26 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth, AuthOverlay, useUser, signOut } from 'deepspace'
-import { ChevronDown, LogOut, Menu, X } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, X, LifeBuoy, Shield } from 'lucide-react'
 import { ROLE_CONFIG, type Role } from '../constants'
 import { nav } from '../nav'
 import { cn } from './ui/utils'
 import { CreditBadge } from './billing/CreditBadge'
 import { useIsPro } from '../lib/useIsPro'
+import { useIsAdmin } from '../lib/useIsAdmin'
+import { HelpModal } from './HelpModal'
 
 const PILL_SHADOW = '0 6px 18px -6px oklch(0.22 0.04 265 / 0.18), 2px 2px 0 0 oklch(0.22 0.04 265 / 0.06)'
 
 export default function Navigation() {
   const { isSignedIn } = useAuth()
   const { user } = useUser()
+  const { isAdmin, ready: adminReady } = useIsAdmin()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const userRole = (user?.role ?? 'anonymous') as Role | 'anonymous'
   // Read but currently unused — keeps the role lookup live for future chrome bits.
@@ -124,6 +128,58 @@ export default function Navigation() {
             <div className="flex items-center gap-1.5">
               {isSignedIn && <ProBadge />}
               {isSignedIn && <CreditBadge />}
+
+              {/* Admin link — only shown after we KNOW the user is admin.
+                  Render nothing while loading so non-admins never see a flash. */}
+              {adminReady && isAdmin && (
+                <Link
+                  to="/admin"
+                  data-testid="nav-admin-link"
+                  aria-label="Admin"
+                  title="Admin"
+                  className="hidden sm:inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors"
+                  style={{
+                    color: location.pathname.startsWith('/admin')
+                      ? 'var(--storynest-lavender-deep)'
+                      : 'var(--storynest-ink-soft)',
+                    background: location.pathname.startsWith('/admin')
+                      ? 'var(--storynest-lavender-soft)'
+                      : 'transparent',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!location.pathname.startsWith('/admin')) {
+                      e.currentTarget.style.background = 'var(--storynest-card-soft)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!location.pathname.startsWith('/admin')) {
+                      e.currentTarget.style.background = 'transparent'
+                    }
+                  }}
+                >
+                  <Shield className="h-4 w-4" aria-hidden />
+                </Link>
+              )}
+
+              {isSignedIn && (
+                <button
+                  type="button"
+                  onClick={() => setHelpOpen(true)}
+                  data-testid="nav-help-button"
+                  aria-label="Help"
+                  title="Help"
+                  className="hidden sm:inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors"
+                  style={{ color: 'var(--storynest-ink-soft)' }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--storynest-card-soft)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                  }}
+                >
+                  <LifeBuoy className="h-4 w-4" aria-hidden />
+                </button>
+              )}
 
               {isSignedIn && user ? (
                 <div className="relative">
@@ -298,6 +354,7 @@ export default function Navigation() {
       </nav>
 
       {showAuthModal && <AuthOverlay onClose={() => setShowAuthModal(false)} />}
+      <HelpModal open={helpOpen} onClose={() => setHelpOpen(false)} />
     </>
   )
 }

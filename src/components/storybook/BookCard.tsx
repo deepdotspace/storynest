@@ -23,6 +23,10 @@ interface BookProps extends CommonProps {
   isCreate?: false
   book: Storybook
   bookId: string
+  /** Set when the card represents a public book owned by SOMEONE ELSE
+   * (e.g. on /explore). Routes the cover thumbnail read through the
+   * cross-user public-book endpoint instead of scope=self. */
+  publicBookId?: string
 }
 
 interface CreateProps extends CommonProps {
@@ -114,7 +118,8 @@ function StickerFrame({
 export function BookCard(props: BookCardProps) {
   // Hooks must always run. Create card passes null and the hook short-circuits.
   const coverKey = props.isCreate ? null : props.book.coverImageKey
-  const { url: coverUrl } = useAssetBlobUrl(coverKey)
+  const publicBookId = props.isCreate ? undefined : props.publicBookId
+  const { url: coverUrl } = useAssetBlobUrl(coverKey, { publicBookId })
 
   if (props.isCreate) {
     return (

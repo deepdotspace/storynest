@@ -1,93 +1,19 @@
 import type { ActionHandler, ActionResult } from 'deepspace/worker'
+import { enqueueJob } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import {
-  buildOutlineSystemPrompt,
-  buildOutlineUserPrompt,
-  buildImagePrompt,
-  buildCoverImagePrompt,
-  extractOutlineJson,
-  type OutlineResult,
-} from '../lib/storyPrompts'
-import {
-  OUTLINE_MODEL,
-  OUTLINE_MAX_TOKENS,
-  IMAGE_MODEL,
-  TTS_MODEL,
-  TTS_VOICE_ID,
-  TTS_OUTPUT_FORMAT,
-  type AgeBand,
-  type ArtStyle,
-} from '../plans'
+import { generateImageBytes } from '../server/ai/image'
+import { generateAudioBytes } from '../server/ai/audio'
+import { type AgeBand, type ArtStyle } from '../plans'
 import {
   PRO_MONTHLY_CREDITS,
   PRO_MONTHLY_GRANT_INTERVAL_DAYS,
   SIGNUP_BONUS_CREDITS,
 } from '../subscriptions'
 import { CREDITS_PER_PACK, type CreditPackId } from '../products'
+import type { StorybookJobPayload } from '../server/jobs/storybookJob'
+import type { RetryFailedPagesPayload } from '../server/jobs/retryFailedPagesJob'
 
-/* ── outline ────────────────────────────────────────────────────────── */
-
-interface OutlineParams {
-  prompt: string
-  characters: string
-  lesson: string
-  ageBand: AgeBand
-  pageCount: number
-  artStyle: ArtStyle
-}
-
-const outlineStorybook: ActionHandler<Env> = async ({ params, tools }) => {
-  try {
-    const input = params as unknown as OutlineParams
-
-    const messages = [
-      { role: 'user', content: buildOutlineUserPrompt(input) },
-    ]
-
-    const result = await tools.integration<{
-      content?: Array<{ type: string; text?: string }>
-      stop_reason?: string
-    }>('anthropic/chat-completion', {
-      model: OUTLINE_MODEL,
-      max_tokens: OUTLINE_MAX_TOKENS,
-      system: buildOutlineSystemPrompt(),
-      messages,
-    })
-
-    if (!result.success) {
-      console.error('[outlineStorybook] integration failed', result.error)
-      return result
-    }
-    const wrapper = result.data as unknown as Record<string, unknown>
-    const response = (wrapper && typeof wrapper === 'object' && 'response' in wrapper
-      ? (wrapper.response as { content?: Array<{ type: string; text?: string }> })
-      : (wrapper as unknown as { content?: Array<{ type: string; text?: string }> }))
-
-    const text = response?.content?.[0]?.text ?? ''
-    if (!text) {
-      console.error('[outlineStorybook] no text in anthropic response', JSON.stringify(response).slice(0, 500))
-      return { success: false, error: 'Anthropic returned empty text content' }
-    }
-
-    let outline: OutlineResult
-    try {
-      outline = extractOutlineJson(text)
-    } catch (err) {
-      console.error('[outlineStorybook] JSON parse failed', text.slice(0, 500))
-      return {
-        success: false,
-        error: `Failed to parse outline JSON: ${err instanceof Error ? err.message : String(err)}`,
-      }
-    }
-    return { success: true, data: outline }
-  } catch (err) {
-    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err)
-    console.error('[outlineStorybook] unhandled', msg)
-    return { success: false, error: `Outline action threw: ${err instanceof Error ? err.message : String(err)}` }
-  }
-}
-
-/* ── per-page image ─────────────────────────────────────────────────── */
+/* ── per-page image (used by single-page reroll in /edit) ───────────── */
 
 interface ImageParams {
   imagePrompt: string
@@ -99,44 +25,29 @@ interface ImageParams {
 const generatePageImage: ActionHandler<Env> = async ({ params, tools }) => {
   try {
     const p = params as unknown as ImageParams
-    const prompt = p.asCover
-      ? buildCoverImagePrompt(p.asCover.title, p.asCover.characters, p.artStyle, p.characterSheet)
-      : buildImagePrompt(p.imagePrompt, p.artStyle, p.characterSheet)
-
-    const result = await tools.integration<{
-      base64Images?: string[]
-      images?: Array<{ base64?: string; data?: string }>
-    }>('gemini/generate-image', {
-      model: IMAGE_MODEL,
-      prompt,
-    })
-
-    if (!result.success) {
-      console.error('[generatePageImage] integration failed', result.error)
-      return result
-    }
-    const wrapper = result.data as unknown as Record<string, unknown>
-    const r = (wrapper && typeof wrapper === 'object' && 'response' in wrapper
-      ? (wrapper.response as { base64Images?: string[]; images?: Array<{ base64?: string; data?: string }> })
-      : (wrapper as unknown as { base64Images?: string[]; images?: Array<{ base64?: string; data?: string }> }))
-    const first =
-      r?.base64Images?.[0] ??
-      r?.images?.[0]?.base64 ??
-      r?.images?.[0]?.data ??
-      null
-    if (!first) {
-      console.error('[generatePageImage] no base64 in gemini response', JSON.stringify(r).slice(0, 400))
-      return { success: false, error: 'Image response had no base64 payload' }
-    }
-    const stripped = first.startsWith('data:') ? first.split(',', 2)[1] : first
-    return { success: true, data: { base64Png: stripped } }
+    const bytes = p.asCover
+      ? await generateImageBytes(tools, {
+          kind: 'cover',
+          title: p.asCover.title,
+          characters: p.asCover.characters,
+          artStyle: p.artStyle,
+          characterSheet: p.characterSheet,
+        })
+      : await generateImageBytes(tools, {
+          kind: 'page',
+          imagePrompt: p.imagePrompt,
+          artStyle: p.artStyle,
+          characterSheet: p.characterSheet,
+        })
+    return { success: true, data: bytes }
   } catch (err) {
-    console.error('[generatePageImage] unhandled', err instanceof Error ? err.stack : String(err))
-    return { success: false, error: `Image action threw: ${err instanceof Error ? err.message : String(err)}` }
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[generatePageImage]', msg)
+    return { success: false, error: msg }
   }
 }
 
-/* ── per-page audio ─────────────────────────────────────────────────── */
+/* ── per-page audio (used by single-page reroll in /edit) ───────────── */
 
 interface AudioParams {
   text: string
@@ -145,42 +56,12 @@ interface AudioParams {
 const generatePageAudio: ActionHandler<Env> = async ({ params, tools }) => {
   try {
     const p = params as unknown as AudioParams
-    if (!p.text || !p.text.trim()) {
-      return { success: false, error: 'Empty text — nothing to narrate' }
-    }
-
-    const result = await tools.integration<{
-      audioUrl?: string
-      audio_base64?: string
-      audio?: string
-      base64?: string
-      data?: string
-    }>('elevenlabs/generate-speech', {
-      text: p.text,
-      voice_id: TTS_VOICE_ID,
-      model_id: TTS_MODEL,
-      output_format: TTS_OUTPUT_FORMAT,
-    })
-
-    if (!result.success) {
-      console.error('[generatePageAudio] integration failed', result.error)
-      return result
-    }
-    const wrapper = result.data as unknown as Record<string, unknown>
-    const r = (wrapper && typeof wrapper === 'object' && 'response' in wrapper
-      ? (wrapper.response as Record<string, string | undefined>)
-      : (wrapper as unknown as Record<string, string | undefined>))
-    const raw =
-      r?.audioUrl ?? r?.audio_base64 ?? r?.audio ?? r?.base64 ?? r?.data ?? null
-    if (!raw) {
-      console.error('[generatePageAudio] no audio in response', JSON.stringify(r).slice(0, 400))
-      return { success: false, error: 'Audio response had no base64 payload' }
-    }
-    const stripped = raw.startsWith('data:') ? raw.split(',', 2)[1] : raw
-    return { success: true, data: { base64Mp3: stripped } }
+    const bytes = await generateAudioBytes(tools, p.text ?? '')
+    return { success: true, data: bytes }
   } catch (err) {
-    console.error('[generatePageAudio] unhandled', err instanceof Error ? err.stack : String(err))
-    return { success: false, error: `Audio action threw: ${err instanceof Error ? err.message : String(err)}` }
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[generatePageAudio]', msg)
+    return { success: false, error: msg }
   }
 }
 
@@ -470,8 +351,393 @@ const setBookVisibility: ActionHandler<Env> = async ({ userId, params, tools }) 
   }
 }
 
+/* ────────────────────────────────────────────────────────────────────────
+ * Admin: featured story picker + help messages
+ *
+ * Featured-story id lives in the existing `settings` (key/value) collection
+ * under key='featured_story_id'. Admin-gated by env.OWNER_USER_ID — role
+ * checks on the client are advisory; the server is authoritative.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+function requireOwner(userId: string, env: Env): ActionResult<never> | null {
+  if (!env.OWNER_USER_ID || userId !== env.OWNER_USER_ID) {
+    return { success: false, error: 'forbidden' }
+  }
+  return null
+}
+
+const FEATURED_KEY = 'featured_story_id'
+
+interface SettingRow extends Record<string, unknown> {
+  key: string
+  value: string
+}
+
+interface StorybookRow extends Record<string, unknown> {
+  title?: string
+  visibility?: string
+  status?: string
+  coverImageKey?: string
+  characters?: string
+  ageBand?: string
+  artStyle?: string
+}
+
+async function findFeaturedSettingRecord(
+  tools: Parameters<ActionHandler<Env>>[0]['tools'],
+): Promise<{ recordId: string; data: SettingRow } | null> {
+  const q = await tools.query<SettingRow>('settings', { where: { key: FEATURED_KEY } })
+  if (!q.success) return null
+  const rec = q.data.records[0]
+  return rec ? { recordId: rec.recordId, data: rec.data } : null
+}
+
+const listPublicStories: ActionHandler<Env> = async ({ userId, tools, env }) => {
+  const denied = requireOwner(userId, env)
+  if (denied) return denied
+  try {
+    const q = await tools.query<StorybookRow>('storybooks', {
+      where: { visibility: 'public' },
+      orderBy: 'updatedAt',
+      orderDir: 'desc',
+    })
+    if (!q.success) return q
+    return {
+      success: true,
+      data: {
+        stories: q.data.records.map((r) => ({
+          recordId: r.recordId,
+          title: r.data.title ?? 'Untitled',
+          status: r.data.status ?? '',
+          coverImageKey: r.data.coverImageKey ?? null,
+          characters: r.data.characters ?? '',
+          ageBand: r.data.ageBand ?? '',
+          artStyle: r.data.artStyle ?? '',
+        })),
+      },
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+const setFeaturedStory: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  const denied = requireOwner(userId, env)
+  if (denied) return denied
+  try {
+    const bookId = String((params as { bookId?: string }).bookId ?? '').trim()
+    if (!bookId) return { success: false, error: 'bookId required' }
+    const got = await tools.get<StorybookRow>('storybooks', bookId)
+    if (!got.success) return got
+    const env2 = (got.data as unknown as { record: { data: StorybookRow } }).record
+    if (env2.data.visibility !== 'public') {
+      return { success: false, error: 'Story must be public to feature' }
+    }
+    if (env2.data.status !== 'ready') {
+      return { success: false, error: 'Story must be ready to feature' }
+    }
+    const existing = await findFeaturedSettingRecord(tools)
+    if (existing) {
+      const upd = await tools.update('settings', existing.recordId, { value: bookId })
+      if (!upd.success) return upd
+    } else {
+      const created = await tools.create('settings', { key: FEATURED_KEY, value: bookId })
+      if (!created.success) return created
+    }
+    return { success: true, data: { bookId } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+const clearFeaturedStory: ActionHandler<Env> = async ({ userId, tools, env }) => {
+  const denied = requireOwner(userId, env)
+  if (denied) return denied
+  try {
+    const existing = await findFeaturedSettingRecord(tools)
+    if (!existing) return { success: true, data: { cleared: false } }
+    const del = await tools.remove('settings', existing.recordId)
+    if (!del.success) return del
+    return { success: true, data: { cleared: true } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+const getFeaturedStoryId: ActionHandler<Env> = async ({ userId, tools, env }) => {
+  const denied = requireOwner(userId, env)
+  if (denied) return denied
+  try {
+    const existing = await findFeaturedSettingRecord(tools)
+    return { success: true, data: { bookId: existing?.data.value ?? null } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+interface HelpMessageRow extends Record<string, unknown> {
+  userId: string
+  userEmail: string
+  userName: string
+  message: string
+  status: string
+  createdAt: number
+}
+
+const sendHelpMessage: ActionHandler<Env> = async ({ userId, params, tools }) => {
+  try {
+    const p = params as { message?: string; email?: string; name?: string }
+    const message = String(p.message ?? '').trim()
+    if (!message) return { success: false, error: 'Message is empty' }
+    if (message.length > 5000) {
+      return { success: false, error: 'Message too long (5000 char max)' }
+    }
+    const row: HelpMessageRow = {
+      userId,
+      userEmail: String(p.email ?? '').slice(0, 320),
+      userName: String(p.name ?? '').slice(0, 200),
+      message,
+      status: 'open',
+      createdAt: Date.now(),
+    }
+    const created = await tools.create('help_messages', row as unknown as Record<string, unknown>)
+    if (!created.success) return created
+    return { success: true, data: { sent: true } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+const listHelpMessages: ActionHandler<Env> = async ({ userId, tools, env }) => {
+  const denied = requireOwner(userId, env)
+  if (denied) return denied
+  try {
+    const q = await tools.query<HelpMessageRow>('help_messages', {
+      orderBy: 'createdAt',
+      orderDir: 'desc',
+    })
+    if (!q.success) return q
+    return {
+      success: true,
+      data: {
+        messages: q.data.records.map((r) => ({
+          recordId: r.recordId,
+          userId: r.data.userId,
+          userEmail: r.data.userEmail ?? '',
+          userName: r.data.userName ?? '',
+          message: r.data.message ?? '',
+          status: r.data.status ?? 'open',
+          createdAt: r.data.createdAt ?? 0,
+        })),
+      },
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+const setHelpMessageStatus: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  const denied = requireOwner(userId, env)
+  if (denied) return denied
+  try {
+    const p = params as { recordId?: string; status?: string }
+    const recordId = String(p.recordId ?? '').trim()
+    const status = String(p.status ?? '').trim()
+    if (!recordId) return { success: false, error: 'recordId required' }
+    if (status !== 'open' && status !== 'resolved') {
+      return { success: false, error: 'status must be open or resolved' }
+    }
+    const upd = await tools.update('help_messages', recordId, { status })
+    if (!upd.success) return upd
+    return { success: true, data: { status } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────────────
+ * Storybook generation — enqueue path
+ *
+ * The browser previously ran the full pipeline (outline → per-page image
+ * → per-page audio → upload). That was fragile: tab-close killed it, no
+ * retries, no parallelism. We now reserve credits, create a placeholder
+ * book row, and enqueue a JobRoom job. The job runs server-side and
+ * updates the same records the client is already subscribed to.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+interface EnqueueParams {
+  prompt: string
+  characters: string
+  lesson: string
+  ageBand: AgeBand
+  pageCount: number
+  artStyle: ArtStyle
+}
+
+interface PlaceholderBookRow extends Record<string, unknown> {
+  title: string
+  prompt: string
+  characters: string
+  lesson: string
+  ageBand: AgeBand
+  pageCount: number
+  artStyle: ArtStyle
+  coverImageKey: string
+  status: string
+  failureReason: string
+  progress: number
+  visibility: string
+  characterSheet: string
+}
+
+const enqueueStorybookGeneration: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  try {
+    const p = params as unknown as EnqueueParams
+    if (!p.prompt?.trim()) return { success: false, error: 'Story idea required' }
+    if (!p.characters?.trim()) return { success: false, error: 'Characters required' }
+    const pageCount = Math.max(1, Math.min(20, Number(p.pageCount) | 0))
+
+    const cost = pageCount * 2
+    const reserveResult = await reserveCreditsInline(tools, userId, env, cost)
+    if (!reserveResult.success) return reserveResult
+
+    const placeholder: PlaceholderBookRow = {
+      title: 'Untitled story',
+      prompt: p.prompt.trim(),
+      characters: p.characters.trim(),
+      lesson: (p.lesson ?? '').trim(),
+      ageBand: p.ageBand,
+      pageCount,
+      artStyle: p.artStyle,
+      coverImageKey: '',
+      status: 'outlining',
+      failureReason: '',
+      progress: 5,
+      visibility: 'public',
+      characterSheet: '',
+    }
+    const created = await tools.create('storybooks', placeholder)
+    if (!created.success) {
+      await refundCreditsInline(tools, userId, env, cost)
+      return created
+    }
+    const bookId = (created.data as { recordId?: string }).recordId
+    if (!bookId) {
+      await refundCreditsInline(tools, userId, env, cost)
+      return { success: false, error: 'create_book_failed: no_recordId' }
+    }
+
+    const payload: StorybookJobPayload = {
+      userId,
+      bookId,
+      reservedCredits: cost,
+      params: {
+        prompt: p.prompt.trim(),
+        characters: p.characters.trim(),
+        lesson: (p.lesson ?? '').trim(),
+        ageBand: p.ageBand,
+        pageCount,
+        artStyle: p.artStyle,
+      },
+    }
+    await enqueueJob(env.JOB_ROOMS, `app:${env.APP_NAME}`, 'generate-storybook', payload)
+
+    return { success: true, data: { bookId } }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[enqueueStorybookGeneration]', msg)
+    return { success: false, error: msg }
+  }
+}
+
+const enqueueRetryFailedPages: ActionHandler<Env> = async ({ userId, params, tools, env }) => {
+  try {
+    const bookId = String((params as { bookId?: string }).bookId ?? '').trim()
+    if (!bookId) return { success: false, error: 'bookId required' }
+    const got = await tools.get('storybooks', bookId)
+    if (!got.success) return got
+    const book = (got.data as unknown as { record: { createdBy: string } }).record
+    if (book.createdBy !== userId) return { success: false, error: 'forbidden' }
+
+    // Count the pages that need redo so we can charge accurately.
+    const pagesQ = await tools.query<{ imageKey?: string; audioKey?: string; status?: string }>(
+      'pages',
+      { where: { bookId } },
+    )
+    if (!pagesQ.success) return pagesQ
+    let cost = 0
+    for (const r of pagesQ.data.records) {
+      const d = r.data
+      if (!d.imageKey) cost++
+      if (!d.audioKey) cost++
+    }
+    if (cost === 0) {
+      return { success: true, data: { nothingToRetry: true } }
+    }
+
+    const reserveResult = await reserveCreditsInline(tools, userId, env, cost)
+    if (!reserveResult.success) return reserveResult
+
+    await tools.update('storybooks', bookId, {
+      status: 'illustrating',
+      failureReason: '',
+      progress: 10,
+    })
+
+    const payload: RetryFailedPagesPayload = { userId, bookId }
+    await enqueueJob(env.JOB_ROOMS, `app:${env.APP_NAME}`, 'retry-failed-pages', payload)
+
+    return { success: true, data: { bookId, retrySteps: cost } }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[enqueueRetryFailedPages]', msg)
+    return { success: false, error: msg }
+  }
+}
+
+/* Internal helpers reused by enqueue actions — same semantics as the
+ * standalone reserveCredits/refundCredits actions but callable directly
+ * instead of round-tripping through the action dispatcher. */
+async function reserveCreditsInline(
+  tools: Parameters<ActionHandler<Env>>[0]['tools'],
+  userId: string,
+  env: Env,
+  amount: number,
+): Promise<ActionResult<{ balance: number }>> {
+  if (isAppOwner(userId, env)) return { success: true, data: { balance: OWNER_BALANCE_SENTINEL } }
+  const acct = await loadOrCreateCreditAccount(tools, userId)
+  if (!acct.success) return acct
+  const { recordId, data } = acct.data
+  if (data.balance < amount) {
+    return { success: false, error: `Insufficient credits — need ${amount}, have ${data.balance}` }
+  }
+  const next = {
+    balance: data.balance - amount,
+    lifetimeSpent: data.lifetimeSpent + amount,
+  }
+  const upd = await tools.update('credit_accounts', recordId, next)
+  if (!upd.success) return upd
+  return { success: true, data: { balance: next.balance } }
+}
+
+async function refundCreditsInline(
+  tools: Parameters<ActionHandler<Env>>[0]['tools'],
+  userId: string,
+  env: Env,
+  amount: number,
+): Promise<void> {
+  if (amount <= 0) return
+  if (isAppOwner(userId, env)) return
+  const acct = await loadOrCreateCreditAccount(tools, userId)
+  if (!acct.success) return
+  const { recordId, data } = acct.data
+  await tools.update('credit_accounts', recordId, {
+    balance: data.balance + amount,
+    lifetimeSpent: Math.max(0, data.lifetimeSpent - amount),
+  })
+}
+
 export const actions: Record<string, ActionHandler<Env>> = {
-  outlineStorybook,
   generatePageImage,
   generatePageAudio,
   getCreditAccount,
@@ -480,4 +746,13 @@ export const actions: Record<string, ActionHandler<Env>> = {
   claimPackCredits,
   claimMonthlyCredits,
   setBookVisibility,
+  listPublicStories,
+  setFeaturedStory,
+  clearFeaturedStory,
+  getFeaturedStoryId,
+  sendHelpMessage,
+  listHelpMessages,
+  setHelpMessageStatus,
+  enqueueStorybookGeneration,
+  enqueueRetryFailedPages,
 }
