@@ -1,136 +1,34 @@
 /**
- * Resolves R2 keys (stored on storybook/page records) to URLs the browser
- * can actually load.
+ * Resolves an R2 key (stored on storybook/page records) to a URL the browser
+ * can load directly.
  *
- * Why this is fiddly: the SDK's `getUrl()` returns a public URL that only
- * works for unauthenticated reads. Our files are owner-scoped (`?scope=self`
- * upstream), so the platform-worker rejects anonymous `<img src>` /
- * `<audio src>` GETs with 401 — the browser doesn't send the Bearer token
- * those resources need. The fix is to fetch the file ourselves with
- * `readFile()` (authenticated) and hand the page a `blob:` URL.
+ * Book assets live under the app prefix (`apps/<app>/…`) and are served via
+ * the platform's app-scope read — `/api/files/<key>?scope=app` — which is
+ * public (no auth header, no proxy, no per-user identity). The returned URL
+ * works as a plain `<img src>` / `<audio src>` for every viewer, owner or
+ * not. This is the SDK's documented mechanism for "assets meant to be
+ * embedded in pages."
  *
- * Use `useAssetBlobUrl(key)` for every owner-scoped asset. The hook
- * handles loading state, errors, and cleanup of the blob URL on key
- * change or unmount.
+ * Why we build the URL by hand instead of `useR2Files({ scope: 'app' }).getUrl`:
+ * the published SDK (v0.4.0) hard-codes `scope=self` inside `useR2Files` and
+ * its type only permits `'self'` — app-scope support landed after the 0.4.0
+ * cut. Our `/api/files/*` worker proxy already forwards the `?scope=` param
+ * verbatim, so constructing `?scope=app` here hits the public read path
+ * directly. Revisit once a release exposes `scope` on the hook.
+ *
+ * (Previously these reads went through an authenticated `/api/book-files`
+ * proxy + blob URLs because the assets were treated as `scope='self'`; that
+ * was the wrong scope for shared/public content and broke cross-user reads.)
  */
-
-import { useEffect, useRef, useState } from 'react'
-import { useR2Files, getAuthToken } from 'deepspace'
-
-export interface AssetBlobUrlState {
-  url: string | null
-  isLoading: boolean
-  error: string | null
-}
-
-export interface AssetBlobUrlOptions {
-  /**
-   * When set, route the read through `/api/book-files/<key>?bookId=<id>`
-   * instead of the SDK's `readFile`. Required for any cross-user read
-   * (e.g. viewing someone else's public book from /explore) because
-   * the SDK's `readFile` always uses scope=self and 403s on another
-   * user's prefix. Server-side this endpoint validates the book is
-   * public AND the key is one of its known assets.
-   */
-  publicBookId?: string
-}
 
 /**
- * Fetches the file and exposes a `blob:` URL. Re-runs when `key` (or
- * `publicBookId`) changes. Revokes the blob URL on cleanup so we don't
- * leak.
+ * Returns a directly-loadable, public URL for an R2 key, or `null` when there
+ * is no key. Keys are stored with their full `apps/<app>/…` prefix, so they
+ * sit inside the app scope and read publicly.
+ *
+ * Not a hook (it calls none) — named `useAssetUrl` for call-site readability.
  */
-export function useAssetBlobUrl(
-  key: string | null | undefined,
-  options?: AssetBlobUrlOptions,
-): AssetBlobUrlState {
-  const { readFile } = useR2Files()
-  const readFileRef = useRef(readFile)
-  readFileRef.current = readFile
-
-  const publicBookId = options?.publicBookId ?? null
-
-  const [state, setState] = useState<AssetBlobUrlState>({
-    url: null,
-    isLoading: false,
-    error: null,
-  })
-
-  useEffect(() => {
-    if (!key) {
-      setState({ url: null, isLoading: false, error: null })
-      return
-    }
-    let canceled = false
-    let createdUrl: string | null = null
-    setState((s) => ({ ...s, isLoading: true, error: null }))
-    ;(async () => {
-      try {
-        let resp: Response
-        if (publicBookId) {
-          const params = new URLSearchParams({ bookId: publicBookId })
-          let token: string | null = null
-          try { token = await getAuthToken() } catch { token = null }
-          resp = await fetch(
-            `/api/book-files/${key}?${params.toString()}`,
-            { headers: token ? { Authorization: `Bearer ${token}` } : {} },
-          )
-        } else {
-          resp = await readFileRef.current(key)
-        }
-        if (canceled) return
-        if (!resp.ok) {
-          // Surface the real failure for the cross-user path so a stuck
-          // image read is diagnosable from the browser console instead of
-          // just rendering "Illustration unavailable".
-          let body = ''
-          try { body = (await resp.text()).slice(0, 300) } catch { /* ignore */ }
-          if (publicBookId) {
-            console.error(
-              `[assetUrl] book-files read failed: HTTP ${resp.status} key=${key} bookId=${publicBookId} body=${body}`,
-            )
-          }
-          if (canceled) return
-          setState({ url: null, isLoading: false, error: `HTTP ${resp.status}` })
-          return
-        }
-        const blob = await resp.blob()
-        if (canceled) return
-        const objUrl = URL.createObjectURL(blob)
-        createdUrl = objUrl
-        setState({ url: objUrl, isLoading: false, error: null })
-      } catch (err) {
-        if (canceled) return
-        setState({
-          url: null,
-          isLoading: false,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-    })()
-    return () => {
-      canceled = true
-      if (createdUrl) URL.revokeObjectURL(createdUrl)
-    }
-  }, [key, publicBookId])
-
-  return state
-}
-
-/**
- * Legacy hook kept for callers that may want the unauthenticated URL
- * (e.g. for share links to public files). For displaying owner-scoped
- * files, ALWAYS prefer `useAssetBlobUrl` — `getUrl` will 401 the
- * browser's anonymous GET.
- */
-export function useAssetUrl(): (key: string | null | undefined) => string | null {
-  const { getUrl } = useR2Files()
-  return (key) => {
-    if (!key) return null
-    return getUrl(key) ?? null
-  }
-}
-
-export function buildAssetUrl(_key: string | null | undefined): string | null {
-  return null
+export function useAssetUrl(key: string | null | undefined): string | null {
+  if (!key) return null
+  return `/api/files/${key}?scope=app`
 }

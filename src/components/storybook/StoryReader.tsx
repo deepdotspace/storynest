@@ -34,7 +34,7 @@ import {
   X as XIcon,
   Captions as CaptionsIcon,
 } from 'lucide-react'
-import { useAssetBlobUrl } from '../../lib/assetUrl'
+import { useAssetUrl } from '../../lib/assetUrl'
 import { PageImage } from './PageImage'
 import { TextBubble } from './TextBubble'
 import { AudioPlayer, type AudioPlayerHandle } from './AudioPlayer'
@@ -68,13 +68,9 @@ interface StoryReaderProps {
   book: ReaderBook
   pages: ReaderPage[]
   onExit: () => void
-  /** Set when the reader is opened on a book the viewer doesn't own
-   * (e.g. opened from /explore). Routes asset reads through the
-   * cross-user public-book endpoint instead of scope=self. */
-  publicBookId?: string
 }
 
-export function StoryReader({ book, pages, onExit, publicBookId }: StoryReaderProps) {
+export function StoryReader({ book, pages, onExit }: StoryReaderProps) {
   const sortedPages = useMemo(
     () => [...pages].sort((a, b) => a.pageNumber - b.pageNumber),
     [pages],
@@ -140,11 +136,9 @@ export function StoryReader({ book, pages, onExit, publicBookId }: StoryReaderPr
   /* ── Resolve current page's audio key (skip on cover / end). ─────────── */
   const onBodyPage = currentIndex >= 1 && currentIndex <= N
   const currentBodyPage = onBodyPage ? sortedPages[currentIndex - 1] : null
-  // Owner-scoped audio — needs blob URL (see assetUrl.ts). When viewing
-  // another user's public book, route via the cross-user endpoint.
-  const { url: currentAudioSrc } = useAssetBlobUrl(
+  // Audio loads directly from the app-scope public URL (see assetUrl.ts).
+  const currentAudioSrc = useAssetUrl(
     onBodyPage ? currentBodyPage?.audioKey ?? null : null,
-    { publicBookId },
   )
 
   const onImageClick = useCallback(() => {
@@ -258,7 +252,6 @@ export function StoryReader({ book, pages, onExit, publicBookId }: StoryReaderPr
         <CoverView
           book={book}
           onStart={goNext}
-          publicBookId={publicBookId}
         />
       ) : currentIndex === lastIndex ? (
         <EndView
@@ -272,7 +265,6 @@ export function StoryReader({ book, pages, onExit, publicBookId }: StoryReaderPr
           total={N}
           textVisible={textVisible && !captionsEnabled}
           onImageClick={onImageClick}
-          publicBookId={publicBookId}
         />
       )}
 
@@ -322,11 +314,9 @@ export function StoryReader({ book, pages, onExit, publicBookId }: StoryReaderPr
 function CoverView({
   book,
   onStart,
-  publicBookId,
 }: {
   book: ReaderBook
   onStart: () => void
-  publicBookId?: string
 }) {
   // Pull a single name out of the characters field for the Caveat byline,
   // falling back to "a story" if not present.
@@ -396,7 +386,6 @@ function CoverView({
               imageKey={book.coverImageKey}
               alt={`Cover illustration for ${book.title}`}
               contain
-              publicBookId={publicBookId}
             />
           </div>
         ) : null}
@@ -443,14 +432,12 @@ function BodyView({
   total,
   textVisible,
   onImageClick,
-  publicBookId,
 }: {
   page: ReaderPage
   index: number
   total: number
   textVisible: boolean
   onImageClick: () => void
-  publicBookId?: string
 }) {
   return (
     <div
@@ -467,7 +454,6 @@ function BodyView({
         <PageImage
           imageKey={page.imageKey}
           alt={`Illustration for page ${index} of ${total}`}
-          publicBookId={publicBookId}
         />
         {/* Soft gradient under the text bubble for legibility */}
         <div

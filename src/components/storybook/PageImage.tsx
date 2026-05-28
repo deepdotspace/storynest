@@ -1,11 +1,11 @@
 /**
  * Lazy R2-backed image with a fade-in on load and a paper placeholder for
- * not-yet-generated illustrations. Uses `useAssetBlobUrl` because our
- * files are owner-scoped — `getUrl()` would 401 (see assetUrl.ts).
+ * not-yet-generated (or unreadable) illustrations. Loads directly from the
+ * app-scope public URL (see assetUrl.ts) — no auth, no proxy.
  */
 
 import { useEffect, useState } from 'react'
-import { useAssetBlobUrl } from '../../lib/assetUrl'
+import { useAssetUrl } from '../../lib/assetUrl'
 import { cn } from '../ui/utils'
 
 interface PageImageProps {
@@ -14,22 +14,21 @@ interface PageImageProps {
   className?: string
   /** When set, image uses object-contain instead of object-cover. */
   contain?: boolean
-  /** Cross-user public-book reads route through `/api/book-files/`
-   * instead of the SDK's scope=self `readFile`. Required when the
-   * caller is not the book's owner (e.g. /explore viewers). */
-  publicBookId?: string
 }
 
-export function PageImage({ imageKey, alt, className, contain, publicBookId }: PageImageProps) {
-  const { url, isLoading, error } = useAssetBlobUrl(imageKey, { publicBookId })
+export function PageImage({ imageKey, alt, className, contain }: PageImageProps) {
+  const url = useAssetUrl(imageKey)
   const [loaded, setLoaded] = useState(false)
+  const [errored, setErrored] = useState(false)
 
-  // Reset loaded state when the underlying url changes (so the fade re-plays).
+  // Reset state when the underlying url changes (so the fade re-plays and a
+  // previous error doesn't stick to a new image).
   useEffect(() => {
     setLoaded(false)
+    setErrored(false)
   }, [url])
 
-  if (!url) {
+  if (!url || errored) {
     return (
       <div
         className={cn(
@@ -42,11 +41,7 @@ export function PageImage({ imageKey, alt, className, contain, publicBookId }: P
           className="font-hand text-2xl"
           style={{ color: 'var(--storynest-ink-mute)' }}
         >
-          {isLoading
-            ? 'Loading illustration…'
-            : error
-              ? 'Illustration unavailable'
-              : 'Illustration coming soon'}
+          {errored ? 'Illustration unavailable' : 'Illustration coming soon'}
         </span>
       </div>
     )
@@ -58,6 +53,7 @@ export function PageImage({ imageKey, alt, className, contain, publicBookId }: P
       alt={alt}
       referrerPolicy="no-referrer"
       onLoad={() => setLoaded(true)}
+      onError={() => setErrored(true)}
       className={cn(
         'w-full h-full transition-opacity duration-500',
         contain ? 'object-contain' : 'object-cover',

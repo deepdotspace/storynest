@@ -217,10 +217,6 @@ export default function EditBook() {
               imageKey={book.coverImageKey}
               alt={`Cover for ${book.title}`}
               contain
-              // Cross-user viewers (e.g. opening a public book from
-              // /explore) can't read the owner's scope=self file —
-              // route through the cross-user endpoint instead.
-              publicBookId={!canEdit ? bookId : undefined}
             />
             {canEdit && (
               <button

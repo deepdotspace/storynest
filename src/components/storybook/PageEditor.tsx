@@ -7,7 +7,7 @@
 import { useState } from 'react'
 import { Textarea, useToast, Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, cn } from '../ui'
 import { useR2Files } from 'deepspace'
-import { useAssetBlobUrl } from '../../lib/assetUrl'
+import { useAssetUrl } from '../../lib/assetUrl'
 import { callAction } from '../../lib/callAction'
 import { rerollPageImage, rerollPageAudio, type Page } from '../../lib/pipeline'
 import type { ArtStyle } from '../../plans'
@@ -192,11 +192,7 @@ function PrimaryPill({
 export function PageEditor({ recordId, page, bookId, artStyle, characterSheet, pagesPut, canEdit = true }: Props) {
   const toast = useToast()
   const r2 = useR2Files()
-  // When the viewer isn't the author, the asset lives under another
-  // user's prefix — fetch via the cross-user public-book endpoint.
-  const { url: imgUrl } = useAssetBlobUrl(page.imageKey, {
-    publicBookId: canEdit ? undefined : bookId,
-  })
+  const imgUrl = useAssetUrl(page.imageKey)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(page.text)

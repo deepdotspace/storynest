@@ -11,7 +11,7 @@
 import { Link } from 'react-router-dom'
 import { cn } from '../ui'
 import type { Storybook } from '../../lib/pipeline'
-import { useAssetBlobUrl } from '../../lib/assetUrl'
+import { useAssetUrl } from '../../lib/assetUrl'
 import { OpenBook, Sparkle, Star } from '../decor'
 
 interface CommonProps {
@@ -23,10 +23,6 @@ interface BookProps extends CommonProps {
   isCreate?: false
   book: Storybook
   bookId: string
-  /** Set when the card represents a public book owned by SOMEONE ELSE
-   * (e.g. on /explore). Routes the cover thumbnail read through the
-   * cross-user public-book endpoint instead of scope=self. */
-  publicBookId?: string
 }
 
 interface CreateProps extends CommonProps {
@@ -118,8 +114,7 @@ function StickerFrame({
 export function BookCard(props: BookCardProps) {
   // Hooks must always run. Create card passes null and the hook short-circuits.
   const coverKey = props.isCreate ? null : props.book.coverImageKey
-  const publicBookId = props.isCreate ? undefined : props.publicBookId
-  const { url: coverUrl } = useAssetBlobUrl(coverKey, { publicBookId })
+  const coverUrl = useAssetUrl(coverKey)
 
   if (props.isCreate) {
     return (

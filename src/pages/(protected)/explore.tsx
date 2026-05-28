@@ -59,7 +59,6 @@ export default function Explore() {
               key={r.recordId}
               bookId={r.recordId}
               book={r.data}
-              publicBookId={r.recordId}
             />
           ))}
         </div>
