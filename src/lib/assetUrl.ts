@@ -80,6 +80,17 @@ export function useAssetBlobUrl(
         }
         if (canceled) return
         if (!resp.ok) {
+          // Surface the real failure for the cross-user path so a stuck
+          // image read is diagnosable from the browser console instead of
+          // just rendering "Illustration unavailable".
+          let body = ''
+          try { body = (await resp.text()).slice(0, 300) } catch { /* ignore */ }
+          if (publicBookId) {
+            console.error(
+              `[assetUrl] book-files read failed: HTTP ${resp.status} key=${key} bookId=${publicBookId} body=${body}`,
+            )
+          }
+          if (canceled) return
           setState({ url: null, isLoading: false, error: `HTTP ${resp.status}` })
           return
         }

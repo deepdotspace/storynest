@@ -137,7 +137,6 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
    * they are the JWT subject.
    */
   APP_OWNER_JWT: string
-  INTERNAL_STORAGE_HMAC_SECRET: string
   /**
    * When set to "true", the app worker exposes /api/debug/* (set-role,
    * sql, query, records, status) by forwarding to the RecordRoom DO's
@@ -607,7 +606,12 @@ app.get('/api/book-files/:key{.+}', async (c) => {
     if (!allowed) return c.json({ error: 'book not public or not found' }, 404)
     if (!allowed.keys.has(key)) return c.json({ error: 'key not part of book' }, 403)
 
-    const platformUrl = new URL('https://internal/internal/files/' + key)
+    // Encode the key — it contains slashes (`apps/<app>/users/<id>/…`).
+    // The platform `/internal/files/:key` endpoint resolves it as a single
+    // encoded segment; forwarding it raw leaves a multi-segment path that
+    // doesn't match, so cross-user reads 404. This mirrors the working
+    // `/api/public/files` forward below.
+    const platformUrl = new URL('https://internal/internal/files/' + encodeURIComponent(key))
     const headers = new Headers()
     headers.set('x-app-identity-token', c.env.APP_IDENTITY_TOKEN)
     headers.set('x-app-name', c.env.APP_NAME)
