@@ -1,34 +1,29 @@
 /**
- * Resolves an R2 key (stored on storybook/page records) to a URL the browser
- * can load directly.
+ * Resolves an R2 storage key to a directly-loadable URL for `<img>` / `<audio>`.
  *
- * Book assets live under the app prefix (`apps/<app>/…`) and are served via
- * the platform's app-scope read — `/api/files/<key>?scope=app` — which is
- * public (no auth header, no proxy, no per-user identity). The returned URL
- * works as a plain `<img src>` / `<audio src>` for every viewer, owner or
- * not. This is the SDK's documented mechanism for "assets meant to be
- * embedded in pages."
+ * Book assets are stored under the app prefix (`apps/<app>/…`) and served via
+ * the platform's app-scope read, which is public — no auth header, no proxy,
+ * no per-user identity. The returned URL works as a plain `src` for every
+ * viewer, owner or not. This is the SDK's documented mechanism for assets
+ * meant to be embedded in pages.
  *
- * Why we build the URL by hand instead of `useR2Files({ scope: 'app' }).getUrl`:
- * the published SDK (v0.4.0) hard-codes `scope=self` inside `useR2Files` and
- * its type only permits `'self'` — app-scope support landed after the 0.4.0
- * cut. Our `/api/files/*` worker proxy already forwards the `?scope=` param
- * verbatim, so constructing `?scope=app` here hits the public read path
- * directly. Revisit once a release exposes `scope` on the hook.
- *
- * (Previously these reads went through an authenticated `/api/book-files`
- * proxy + blob URLs because the assets were treated as `scope='self'`; that
- * was the wrong scope for shared/public content and broke cross-user reads.)
+ * Thin wrapper over `useR2Files({ scope: 'app' }).getUrl`. The wrapper adds one
+ * thing the raw hook method doesn't: it returns `null` for a missing key, so
+ * call sites can branch on absence (render a placeholder) instead of pointing
+ * an element at a keyless URL.
  */
 
+import { useR2Files } from 'deepspace'
+
+// Module-level constant so the options object is referentially stable across
+// renders and every consumer shares one app-scope file client.
+const APP_SCOPE = { scope: 'app' } as const
+
 /**
- * Returns a directly-loadable, public URL for an R2 key, or `null` when there
- * is no key. Keys are stored with their full `apps/<app>/…` prefix, so they
- * sit inside the app scope and read publicly.
- *
- * Not a hook (it calls none) — named `useAssetUrl` for call-site readability.
+ * Returns a public, directly-loadable URL for an R2 key, or `null` when there
+ * is no key. Keys are stored with their full `apps/<app>/…` prefix.
  */
 export function useAssetUrl(key: string | null | undefined): string | null {
-  if (!key) return null
-  return `/api/files/${key}?scope=app`
+  const { getUrl } = useR2Files(APP_SCOPE)
+  return key ? getUrl(key) : null
 }

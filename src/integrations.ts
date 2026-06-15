@@ -17,5 +17,4 @@
 
 export const integrations: Record<string, { billing: 'developer' | 'user' }> = {
   google: { billing: 'user' },
-  // openai: { billing: 'developer' },
 }

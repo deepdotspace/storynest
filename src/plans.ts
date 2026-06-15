@@ -76,7 +76,7 @@ export const OUTLINE_MAX_TOKENS = 4000
 export const IMAGE_MODEL = 'gemini-2.5-flash-image'
 
 export const TTS_MODEL = 'eleven_flash_v2_5'
-export const TTS_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
+export const TTS_VOICE_ID = 'WdZjiN0nNcik2LBjOHiv' // David - Raspy and Soft
 export const TTS_OUTPUT_FORMAT = 'mp3_44100_128'
 
 /* ── Limits ──────────────────────────────────────────────────────────── */

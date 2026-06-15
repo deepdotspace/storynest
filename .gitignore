@@ -6,3 +6,9 @@ dist
 *.tgz
 docs/
 past_report.md
+.impeccable.md
+
+# promo assets — kept local, not shipped in the OSS repo
+promo/
+storynest-promo.mp4
+david-voice-sample.mp3
